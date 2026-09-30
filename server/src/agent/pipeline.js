@@ -1,9 +1,17 @@
 import { inference } from "@livekit/agents";
 import * as anthropic from "@livekit/agents-plugin-anthropic";
+import * as elevenlabs from "@livekit/agents-plugin-elevenlabs";
 import { livekitConfig } from "../integrations/livekit/index.js";
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
-import { isHostedModel, speedOption, ttsModelFor, voiceFor } from "../ai/catalog.js";
+import {
+  elevenLabsVoiceId,
+  isElevenLabsVoice,
+  isHostedModel,
+  speedOption,
+  ttsModelFor,
+  voiceFor,
+} from "../ai/catalog.js";
 
 /**
  * Builds the speech and language half of a call.
@@ -101,6 +109,18 @@ function buildTts(avatar) {
   const persona = avatar?.persona;
   const { voice, assigned } = voiceFor(avatar);
   const language = persona?.language || avatar?.voice?.language || env.sttLanguage;
+
+  if (isElevenLabsVoice(voice)) {
+    if (env.elevenlabs.apiKey) return buildElevenLabsTts(voice, language, persona?.voiceSpeed);
+    // The clone still exists at ElevenLabs; the call just cannot reach it.
+    // Speak with the default voice rather than not at all.
+    const fallback = buildTts({ ...avatar, persona: { ...persona, voice: env.ttsVoice } });
+    return {
+      ...fallback,
+      note: `Cloned voice needs ELEVENLABS_API_KEY; using the default "${env.ttsVoice}".`,
+    };
+  }
+
   const model = ttsModelFor(voice);
   const modelOptions = speedOption(model, persona?.voiceSpeed);
 
@@ -113,6 +133,29 @@ function buildTts(avatar) {
     }),
     label: `${model} / ${voice}${modelOptions ? ` @ ${persona.voiceSpeed}x` : ""}`,
     note: assigned ? null : `Avatar has no voice assigned; using the default "${voice}".`,
+  };
+}
+
+/**
+ * A voice the workspace cloned through ElevenLabs, spoken by ElevenLabs'
+ * own plugin with the install's key - LiveKit Inference cannot reach clones
+ * that live in someone else's ElevenLabs account.
+ */
+function buildElevenLabsTts(voice, language, speed) {
+  const model = env.elevenlabs.model;
+  const speedOpt = speedOption(`elevenlabs/${model}`, speed);
+
+  return {
+    instance: new elevenlabs.TTS({
+      apiKey: env.elevenlabs.apiKey,
+      voiceId: elevenLabsVoiceId(voice),
+      model,
+      language,
+      // ElevenLabs' recommended defaults for a clone, plus the persona's speed.
+      ...(speedOpt && { voiceSettings: { stability: 0.5, similarity_boost: 0.75, speed: speedOpt.speed } }),
+    }),
+    label: `elevenlabs/${model} / ${elevenLabsVoiceId(voice)}${speedOpt ? ` @ ${speedOpt.speed}x` : ""}`,
+    note: null,
   };
 }
 

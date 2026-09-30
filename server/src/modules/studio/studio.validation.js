@@ -1,13 +1,14 @@
 import { z } from "zod";
-import { isCustomVoice, llmModels, voicesForTts } from "../../ai/catalog.js";
+import { isOwnVoice, llmModels, voicesForTts } from "../../ai/catalog.js";
 
 // A voice or model the call pipeline does not know would only fail mid-call,
 // so they are refused when saved. No voice list (a TTS model the catalogue does
 // not cover) means any name is let through, as before. Custom voices are not
-// in the list - they are the workspace's own, cloned in LiveKit Cloud.
+// in the list - they are the workspace's own, cloned in LiveKit Cloud or
+// through ElevenLabs.
 const knownVoice = (v) => {
   const voices = voicesForTts();
-  return !v || isCustomVoice(v) || !voices.length || voices.some((x) => x.id === v);
+  return !v || isOwnVoice(v) || !voices.length || voices.some((x) => x.id === v);
 };
 const knownModel = (m) => !m || llmModels().some((x) => x.id === m);
 

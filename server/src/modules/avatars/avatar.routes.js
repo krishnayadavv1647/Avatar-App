@@ -41,4 +41,15 @@ router.get("/:id/share", validate(avatarValidation.byId), avatarController.getSh
 router.put("/:id/share", validate(avatarValidation.setShare), avatarController.setShare);
 router.post("/:id/share/reset", validate(avatarValidation.byId), avatarController.resetShare);
 
+// Sending the avatar into an external meeting, and taking it out again.
+router.post("/:id/meeting", validate(avatarValidation.joinMeeting), avatarController.joinMeeting);
+router.post(
+  "/:id/meeting/:conversationId/leave",
+  validate(avatarValidation.leaveMeeting),
+  avatarController.leaveMeeting,
+);
+
+// The short talking clip shown when hovering the avatar's card.
+router.post("/:id/preview-video", validate(avatarValidation.byId), avatarController.makePreview);
+
 export default router;

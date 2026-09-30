@@ -1,7 +1,15 @@
 import { CAPABILITIES } from "../avatar/capabilities.js";
 import { isConfigured } from "../avatar/providers/registry.js";
 import { env } from "../config/env.js";
-import { LANGUAGES, isCustomVoice, isHostedModel, llmModels, voiceFor, voicesForTts } from "../ai/catalog.js";
+import {
+  LANGUAGES,
+  isElevenLabsVoice,
+  isHostedModel,
+  isOwnVoice,
+  llmModels,
+  voiceFor,
+  voicesForTts,
+} from "../ai/catalog.js";
 import { CONTEXT_BUDGET_CHARS } from "../ai/knowledge.js";
 import { agentIdOf } from "../avatar/providers/lemonslice.provider.js";
 
@@ -57,9 +65,12 @@ export async function preflight(avatar, { network = false } = {}) {
   // What it sounds like.
   const voices = voicesForTts();
   const { voice } = voiceFor({ ...avatar, persona });
-  // A custom voice is checked by LiveKit when the call speaks, not by any list here.
-  if (!isCustomVoice(voice) && voices.length && !voices.some((v) => v.id === voice)) {
+  // A custom voice is checked by its provider when the call speaks, not by any list here.
+  if (!isOwnVoice(voice) && voices.length && !voices.some((v) => v.id === voice)) {
     errors.push(`Voice "${voice}" is not a voice of the TTS model ${env.ttsModel}.`);
+  }
+  if (isElevenLabsVoice(voice) && !env.elevenlabs.apiKey) {
+    warnings.push(`The cloned voice needs ELEVENLABS_API_KEY; calls fall back to "${env.ttsVoice}".`);
   }
   if (persona.voiceSpeed != null && (persona.voiceSpeed < 0.5 || persona.voiceSpeed > 1.5)) {
     errors.push(`Voice speed ${persona.voiceSpeed} is outside 0.5-1.5.`);

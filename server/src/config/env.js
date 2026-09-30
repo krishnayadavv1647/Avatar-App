@@ -94,6 +94,15 @@ export const env = {
   // so calls with one switch to this model instead of TTS_MODEL.
   customVoiceTtsModel: optional("CUSTOM_VOICE_TTS_MODEL", "cartesia/sonic-3"),
 
+  // Voice cloning: someone uploads or records their own voice, ElevenLabs
+  // clones it, and avatars using it speak through ElevenLabs directly (with
+  // this key) instead of LiveKit Inference. Unset means cloning is off.
+  elevenlabs: {
+    apiKey: optional("ELEVENLABS_API_KEY"),
+    // Flash is ElevenLabs' low-latency model - what a live call needs.
+    model: optional("ELEVENLABS_TTS_MODEL", "eleven_flash_v2_5"),
+  },
+
   // Where the API is reachable from outside. The local storage driver builds
   // its URLs from this, so a tunnel host belongs here when testing a real vendor.
   publicBaseUrl: optional("PUBLIC_BASE_URL", `http://localhost:${optional("PORT", "4000")}`),

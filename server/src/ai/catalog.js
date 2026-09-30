@@ -73,7 +73,25 @@ export const isCustomVoice = (id) => typeof id === "string" && /^v_[A-Za-z0-9]{6
  * custom ones need a model LiveKit clones onto, which the default Inworld one
  * need not be.
  */
-export const ttsModelFor = (voice) => (isCustomVoice(voice) ? env.customVoiceTtsModel : env.ttsModel);
+export const ttsModelFor = (voice) => {
+  if (isElevenLabsVoice(voice)) return `elevenlabs/${env.elevenlabs.model}`;
+  return isCustomVoice(voice) ? env.customVoiceTtsModel : env.ttsModel;
+};
+
+/**
+ * A voice cloned through ElevenLabs, stored on the persona as
+ * "elevenlabs:<voice_id>". The prefix keeps it apart from stock and LiveKit
+ * voices everywhere a voice is checked, and tells the pipeline to speak it
+ * through ElevenLabs rather than LiveKit Inference.
+ */
+const ELEVENLABS_PREFIX = "elevenlabs:";
+export const isElevenLabsVoice = (id) =>
+  typeof id === "string" && /^elevenlabs:[A-Za-z0-9]{10,40}$/.test(id);
+export const elevenLabsVoiceId = (id) => id.slice(ELEVENLABS_PREFIX.length);
+export const toElevenLabsVoice = (voiceId) => `${ELEVENLABS_PREFIX}${voiceId}`;
+
+/** A voice the workspace cloned itself - checked by its provider, not a list. */
+export const isOwnVoice = (id) => isCustomVoice(id) || isElevenLabsVoice(id);
 
 /** The voice a new avatar gets for its character, or the install default. */
 export function defaultVoiceFor(gender) {
@@ -89,6 +107,8 @@ export function speedOption(model, speed) {
   if (speed == null || speed === 1) return undefined;
   if (model.startsWith("inworld/")) return { speaking_rate: speed };
   if (/^(cartesia|xai|fishaudio)\//.test(model)) return { speed };
+  // ElevenLabs only accepts 0.7-1.2, so the ends of the slider are clamped.
+  if (model.startsWith("elevenlabs/")) return { speed: Math.min(1.2, Math.max(0.7, speed)) };
   return undefined;
 }
 

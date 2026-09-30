@@ -17,7 +17,10 @@ const conversationSchema = new mongoose.Schema(
     // "link" calls come from someone outside the workspace through an avatar's
     // share link. They have no user, only the name they typed - which is what
     // the history shows, and what the avatar is told to call them.
-    source: { type: String, enum: ["app", "link"], default: "app" },
+    // "meeting" calls are the avatar sitting in a Zoom / Meet / Teams / Webex
+    // meeting through LemonSlice; meetingUrl is the meeting it was sent to.
+    source: { type: String, enum: ["app", "link", "meeting"], default: "app" },
+    meetingUrl: { type: String, trim: true },
     guest: {
       name: { type: String, trim: true },
       email: { type: String, trim: true, lowercase: true },

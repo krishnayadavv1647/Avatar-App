@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { voiceApi } from "@/services/voice.api";
@@ -8,13 +8,13 @@ import Button from "@/components/common/Button";
 /**
  * "Your voices": the workspace's own cloned voices.
  *
- * LiveKit has no public cloning API, so the clone is made in the LiveKit Cloud
- * dashboard and only its v_* id is added here. Like the Knowledge Base, this
- * row saves through its own requests rather than the avatar's autosave; the
- * voice picker above reads the same query.
+ * A voice is cloned right here - Instant Voice Clone through ElevenLabs - from
+ * an uploaded sample or one recorded in the browser. Voices added earlier by a
+ * LiveKit Cloud id still show in the list and still work. Like the Knowledge
+ * Base, this row saves through its own requests rather than the avatar's
+ * autosave; the voice picker above reads the same query.
  */
 const KEY = ["custom-voices"];
-const DASHBOARD = "https://cloud.livekit.io";
 
 export function useCustomVoices() {
   return useQuery({ queryKey: KEY, queryFn: voiceApi.list });
@@ -23,7 +23,7 @@ export function useCustomVoices() {
 export default function CustomVoices({ selected, onAdded }) {
   const queryClient = useQueryClient();
   const { data: voices = [], isLoading } = useCustomVoices();
-  const [adding, setAdding] = useState(false);
+  const [cloning, setCloning] = useState(false);
 
   const remove = useMutation({
     mutationFn: voiceApi.remove,
@@ -41,9 +41,10 @@ export default function CustomVoices({ selected, onAdded }) {
         </div>
         <button
           type="button"
-          onClick={() => setAdding(true)}
-          className="h-9 shrink-0 rounded-sm border border-border-strong bg-bg px-4 text-ui font-semibold text-text transition-colors hover:bg-surface-3"
+          onClick={() => setCloning(true)}
+          className="flex h-9 shrink-0 items-center gap-2 rounded-sm border border-border-strong bg-bg px-4 text-ui font-semibold text-text transition-colors hover:bg-surface-3"
         >
+          <WaveGlyph />
           Add voice
         </button>
       </div>
@@ -60,12 +61,15 @@ export default function CustomVoices({ selected, onAdded }) {
                     <span className="ml-2 text-label text-text-muted">· in use</span>
                   )}
                 </p>
-                <p className="truncate font-mono text-label text-text-faint">{v.providerVoiceId}</p>
+                <p className="truncate text-label text-text-faint">
+                  {v.provider === "elevenlabs" ? "Instant voice clone" : "Added from LiveKit Cloud"}
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => {
-                  if (window.confirm(`Remove "${v.name}" from your voices?`)) remove.mutate(v._id);
+                  const also = v.provider === "elevenlabs" ? " It is deleted from ElevenLabs too." : "";
+                  if (window.confirm(`Remove "${v.name}" from your voices?${also}`)) remove.mutate(v._id);
                 }}
                 disabled={remove.isPending}
                 aria-label={`Remove ${v.name}`}
@@ -79,110 +83,344 @@ export default function CustomVoices({ selected, onAdded }) {
       )}
       {remove.error && <p className="mt-2 text-ui text-red">{remove.error.message}</p>}
 
-      <AddVoiceDialog
-        open={adding}
-        onClose={() => setAdding(false)}
-        onAdded={(voice) => {
-          queryClient.invalidateQueries({ queryKey: KEY });
-          setAdding(false);
-          onAdded?.(voice);
-        }}
-      />
+      {cloning && (
+        <CloneVoiceDialog
+          onClose={() => setCloning(false)}
+          onAdded={(voice) => {
+            queryClient.invalidateQueries({ queryKey: KEY });
+            setCloning(false);
+            onAdded?.(voice);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function AddVoiceDialog({ open, onClose, onAdded }) {
-  const [name, setName] = useState("");
-  const [voiceId, setVoiceId] = useState("");
-  const [gender, setGender] = useState("");
+/* ------------------------------------------------------------------------ */
 
-  const create = useMutation({
-    mutationFn: voiceApi.create,
-    onSuccess: (voice) => {
-      setName("");
-      setVoiceId("");
-      setGender("");
-      onAdded(voice);
-    },
+// ElevenLabs clones well from 15-60 seconds; much less and the likeness
+// suffers, and it accepts files up to about 10 MB.
+const MIN_SECONDS = 15;
+const MAX_SECONDS = 60;
+const MAX_BYTES = 10 * 1024 * 1024;
+
+const SCRIPT =
+  "Hi, this is my voice. I'm recording this so my avatar can speak just like me. " +
+  "I like to keep things simple and clear, and I try to explain ideas in a friendly way. " +
+  "When someone asks me a question, I listen carefully, think for a moment, and then answer honestly. " +
+  "Thanks for listening - I'm looking forward to our next conversation.";
+
+/** How long an audio blob plays for, or null if the browser cannot tell. */
+function audioSeconds(blob) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio();
+    const done = (value) => {
+      URL.revokeObjectURL(url);
+      resolve(value);
+    };
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => done(Number.isFinite(audio.duration) ? audio.duration : null);
+    audio.onerror = () => done(null);
+    audio.src = url;
+  });
+}
+
+/**
+ * Instant Voice Clone: a name, an optional description, a 15-60 second sample
+ * (uploaded, or recorded here), and the speaker's consent. The sample is only
+ * held in this dialog and in the upload; the server passes it to ElevenLabs
+ * without storing it.
+ */
+function CloneVoiceDialog({ onClose, onAdded }) {
+  const { data: caps, isLoading: checking } = useQuery({
+    queryKey: ["voice-capabilities"],
+    queryFn: voiceApi.capabilities,
+  });
+  const [recording, setRecording] = useState(false);
+  const [sample, setSample] = useState(null); // { blob, name, seconds }
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [fileError, setFileError] = useState(null);
+  const [dragging, setDragging] = useState(false);
+
+  const clone = useMutation({
+    mutationFn: () =>
+      voiceApi.clone({
+        name: name.trim(),
+        description: description.trim(),
+        sample: sample.blob,
+        fileName: sample.name,
+      }),
+    onSuccess: onAdded,
   });
 
-  const submit = (e) => {
-    e.preventDefault();
-    create.mutate({ name: name.trim(), voiceId: voiceId.trim(), gender: gender || undefined });
+  const pickFile = async (file) => {
+    setFileError(null);
+    if (!file) return;
+    if (!/^(audio|video)\//.test(file.type)) return setFileError("That is not an audio file.");
+    if (file.size > MAX_BYTES) return setFileError("Keep the file under 10 MB.");
+    const seconds = await audioSeconds(file);
+    if (seconds != null && seconds < MIN_SECONDS) {
+      return setFileError(`That sample is ${Math.round(seconds)} seconds - use at least ${MIN_SECONDS}.`);
+    }
+    setSample({ blob: file, name: file.name, seconds: seconds && Math.round(seconds) });
   };
+
+  const unavailable = !checking && !caps?.cloning;
+  const ready = sample && name.trim() && consent && !clone.isPending && !unavailable;
 
   return (
     <Modal
-      open={open}
-      onClose={onClose}
-      title="Add your voice"
-      description="Clone a voice in LiveKit Cloud, then add it here to use it on your avatars."
+      open
+      onClose={() => !clone.isPending && onClose()}
+      title="Clone New Voice"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose} disabled={clone.isPending}>
             Cancel
           </Button>
-          <Button type="submit" form="add-voice" disabled={!name.trim() || !voiceId.trim() || create.isPending}>
-            {create.isPending ? "Adding…" : "Add voice"}
+          <Button onClick={() => clone.mutate()} disabled={!ready}>
+            {clone.isPending ? "Cloning…" : "Add Voice"}
           </Button>
         </>
       }
     >
-      <ol className="space-y-2 text-ui text-text-muted">
-        <li>
-          1. Open{" "}
-          <a href={DASHBOARD} target="_blank" rel="noreferrer" className="text-text underline underline-offset-2">
-            LiveKit Cloud
-          </a>{" "}
-          → <span className="text-text">Voices → Custom voices → Create voice clone</span>.
-        </li>
-        <li>
-          2. Record or upload about 10 seconds of clear speech (MP3, WAV, OGG or WEBM, under 4 MB) with no
-          background noise.
-        </li>
-        <li>
-          3. Copy the voice ID it gives you - it starts with <code className="font-mono text-text">v_</code> - and
-          paste it below.
-        </li>
-      </ol>
+      <div className="space-y-5">
+        {unavailable && (
+          <p className="rounded border border-border-strong bg-surface-2 px-4 py-3 text-ui text-yellow">
+            Voice cloning is not set up on this server yet. Add ELEVENLABS_API_KEY to server/.env and restart
+            the server.
+          </p>
+        )}
 
-      <form id="add-voice" onSubmit={submit} className="mt-6 space-y-4">
         <Field label="Name">
           <input
             value={name}
             maxLength={60}
-            placeholder="My voice"
+            autoFocus
+            placeholder="Enter voice name"
             onChange={(e) => setName(e.target.value)}
             className={inputClass}
           />
         </Field>
-        <Field label="Voice ID">
+
+        <Field label="Description">
           <input
-            value={voiceId}
-            maxLength={40}
-            placeholder="v_RT5PsNhXvMaB"
-            spellCheck={false}
-            onChange={(e) => setVoiceId(e.target.value)}
-            className={clsx(inputClass, "font-mono")}
+            value={description}
+            maxLength={300}
+            placeholder="Enter voice description (optional)"
+            onChange={(e) => setDescription(e.target.value)}
+            className={inputClass}
           />
         </Field>
-        <Field label="Gender (optional)">
-          <select
-            value={gender}
-            onChange={(e) => setGender(e.target.value)}
-            className={clsx(inputClass, "cursor-pointer [color-scheme:dark]")}
-          >
-            <option value="">Not set</option>
-            <option value="female">Female</option>
-            <option value="male">Male</option>
-          </select>
-        </Field>
-        {create.error && <p className="text-ui text-red">{create.error.message}</p>}
-      </form>
+
+        <div>
+          <p className="text-ui font-medium">Upload Voice Sample</p>
+          <p className="mt-0.5 text-label text-text-muted">
+            Upload a {MIN_SECONDS}-{MAX_SECONDS}s audio sample of the voice you want to clone.
+          </p>
+
+          {recording ? (
+            <div className="mt-2.5">
+              <Recorder
+                onSample={(s) => {
+                  setSample(s);
+                  if (s) setRecording(false);
+                }}
+                disabled={clone.isPending}
+              />
+              <button
+                type="button"
+                onClick={() => setRecording(false)}
+                className="mt-2 text-label text-text-faint hover:text-text-muted"
+              >
+                Upload a file instead
+              </button>
+            </div>
+          ) : (
+            <>
+              <label
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragging(false);
+                  pickFile(e.dataTransfer.files?.[0]);
+                }}
+                className={clsx(
+                  "mt-2.5 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border px-4 py-6 text-center transition-colors",
+                  dragging ? "border-pink bg-pink-dim" : "border-border bg-surface-2 hover:bg-surface-3",
+                )}
+              >
+                <UploadGlyph />
+                <span className="text-ui font-medium">
+                  {sample ? sample.name : "Drag and drop an audio file here, or click to select"}
+                </span>
+                <span className="text-label text-text-faint">
+                  {sample?.seconds
+                    ? `${sample.seconds} seconds · click to change`
+                    : "MP3, WAV, M4A, OGG or WEBM · up to 10 MB"}
+                </span>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  className="sr-only"
+                  disabled={clone.isPending}
+                  onChange={(e) => pickFile(e.target.files?.[0])}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setRecording(true);
+                  setFileError(null);
+                }}
+                className="mt-2 text-label text-text-faint hover:text-text-muted"
+              >
+                No recording? Record one in your browser
+              </button>
+            </>
+          )}
+          {fileError && <p className="mt-2 text-ui text-red">{fileError}</p>}
+          {sample && <Playback blob={sample.blob} />}
+        </div>
+
+        <label className="flex cursor-pointer items-start gap-3 text-ui text-text">
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[color:var(--pink)]"
+          />
+          <span>
+            I hereby confirm that I have all necessary rights or consents to upload and clone this voice sample
+            and that I will not use the platform-generated content for any illegal, fraudulent, or harmful
+            purpose.
+          </span>
+        </label>
+
+        {clone.error && (
+          <p className="text-ui text-red">{clone.error.details?.[0]?.message || clone.error.message}</p>
+        )}
+      </div>
     </Modal>
   );
 }
+
+/**
+ * Records from the microphone with a script to read, a running timer and a
+ * cap at the longest useful sample. Too-short takes are refused here, where
+ * re-recording is one click, rather than after an upload.
+ */
+function Recorder({ onSample, disabled }) {
+  const [active, setActive] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [error, setError] = useState(null);
+  const recorder = useRef(null);
+  const timer = useRef(null);
+
+  const stopTracks = () => recorder.current?.stream.getTracks().forEach((t) => t.stop());
+
+  // Leaving mid-take releases the microphone.
+  useEffect(
+    () => () => {
+      clearInterval(timer.current);
+      if (recorder.current?.state === "recording") recorder.current.stop();
+      stopTracks();
+    },
+    [],
+  );
+
+  const start = async () => {
+    setError(null);
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+    } catch {
+      setError("Microphone access was blocked. Allow it in the browser, or upload a file instead.");
+      return;
+    }
+
+    const chunks = [];
+    const rec = new MediaRecorder(stream);
+    const startedAt = Date.now();
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      clearInterval(timer.current);
+      stopTracks();
+      setActive(false);
+      const took = Math.round((Date.now() - startedAt) / 1000);
+      if (took < MIN_SECONDS) {
+        setError(`That was ${took} seconds - record at least ${MIN_SECONDS}.`);
+        return;
+      }
+      const type = rec.mimeType || "audio/webm";
+      const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+      onSample({ blob: new Blob(chunks, { type }), name: `recording.${ext}`, seconds: took });
+    };
+
+    recorder.current = rec;
+    rec.start();
+    onSample(null);
+    setSeconds(0);
+    setActive(true);
+    timer.current = setInterval(() => {
+      const s = Math.round((Date.now() - startedAt) / 1000);
+      setSeconds(s);
+      if (s >= MAX_SECONDS) rec.stop();
+    }, 250);
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-surface-2 p-4">
+      <p className="text-label font-medium uppercase tracking-wider text-text-faint">Read this aloud</p>
+      <p className="mt-2 text-ui leading-relaxed text-text">{SCRIPT}</p>
+
+      <div className="mt-4 flex items-center gap-3">
+        <Button
+          size="sm"
+          variant={active ? "danger" : "primary"}
+          onClick={active ? () => recorder.current?.stop() : start}
+          disabled={disabled}
+        >
+          {active ? <StopGlyph /> : <MicGlyph />}
+          {active ? "Stop" : "Start recording"}
+        </Button>
+        {active && (
+          <span className="flex items-center gap-2 text-ui tabular-nums text-text-muted">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-red" aria-hidden />
+            {formatTime(seconds)} / {formatTime(MAX_SECONDS)}
+          </span>
+        )}
+      </div>
+      <p className="mt-3 text-label text-text-faint">
+        A quiet room and your normal speaking voice give the best clone.
+      </p>
+      {error && <p className="mt-2 text-ui text-red">{error}</p>}
+    </div>
+  );
+}
+
+/** Lets people hear the sample before it is sent. */
+function Playback({ blob }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(blob);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [blob]);
+  return url ? <audio controls src={url} className="mt-3 h-10 w-full [color-scheme:dark]" /> : null;
+}
+
+const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 const inputClass =
   "h-10 w-full rounded border border-border bg-bg px-4 text-ui text-text outline-none transition-colors placeholder:text-text-faint focus:border-border-strong";
@@ -193,5 +431,47 @@ function Field({ label, children }) {
       <span className="mb-1.5 block text-ui font-medium">{label}</span>
       {children}
     </label>
+  );
+}
+
+const glyph = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.6,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  "aria-hidden": true,
+};
+
+function WaveGlyph() {
+  return (
+    <svg {...glyph} width="15" height="15" viewBox="0 0 16 16">
+      <path d="M2 6.5v3M4.5 4v8M7 2v12M9.5 5v6M12 3.5v9M14.5 6.5v3" />
+    </svg>
+  );
+}
+
+function UploadGlyph() {
+  return (
+    <svg {...glyph} width="22" height="22" viewBox="0 0 24 24" className="text-text-muted">
+      <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
+function MicGlyph() {
+  return (
+    <svg {...glyph} width="14" height="14" viewBox="0 0 16 16">
+      <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" />
+      <path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2" />
+    </svg>
+  );
+}
+
+function StopGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+      <rect x="3" y="3" width="10" height="10" rx="2" />
+    </svg>
   );
 }

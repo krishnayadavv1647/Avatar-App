@@ -90,7 +90,7 @@ function Overview() {
                     <td className="py-2.5">{c.user?.email || "—"}</td>
                     <td className="py-2.5">{c.avatar}</td>
                     <td className="py-2.5 text-text-muted">
-                      {c.source === "link" ? `Share link${c.guest ? ` · ${c.guest}` : ""}` : "App"}
+                      {c.source === "link" ? `Share link${c.guest ? ` · ${c.guest}` : ""}` : c.source === "meeting" ? "Meeting" : "App"}
                     </td>
                     <td className="py-2.5 text-right text-text-muted">{timeAgo(c.startedAt)}</td>
                   </tr>

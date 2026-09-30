@@ -1,5 +1,7 @@
 import { avatarService } from "./avatar.service.js";
 import { knowledgeService } from "./knowledge.service.js";
+import { previewService } from "./preview.service.js";
+import { roomService } from "../rooms/room.service.js";
 import { asyncHandler } from "../../middleware/validate.js";
 
 export const avatarController = {
@@ -47,5 +49,44 @@ export const avatarController = {
 
   resetShare: asyncHandler(async (req, res) => {
     res.json({ share: await avatarService.resetShare(req.workspace._id, req.params.id) });
+  }),
+
+  /**
+   * Sends the avatar into a Zoom / Meet / Teams / Webex meeting through
+   * LemonSlice. It is an ordinary call underneath - same limits, same history,
+   * same metering - that happens to take place in someone else's meeting.
+   */
+  joinMeeting: asyncHandler(async (req, res) => {
+    const { conversationId } = await roomService.startCall({
+      workspace: req.workspace,
+      avatarId: req.params.id,
+      userId: req.auth?.userId,
+      source: "meeting",
+      meetingUrl: req.body.meetingUrl,
+    });
+    res.status(202).json({ conversationId });
+  }),
+
+  /** Takes the avatar out of the meeting and ends that call. */
+  leaveMeeting: asyncHandler(async (req, res) => {
+    res.json(
+      await roomService.endCall({
+        workspace: req.workspace,
+        conversationId: req.params.conversationId,
+        endReason: "removed from meeting",
+      }),
+    );
+  }),
+
+  /** Makes (or remakes) the avatar's hover clip; see preview.service.js. */
+  makePreview: asyncHandler(async (req, res) => {
+    // get() is scoped to the workspace, so another workspace's avatar 404s.
+    await avatarService.get(req.workspace._id, req.params.id);
+    const result = await previewService.request(req.params.id, { force: true });
+    if (!result.started) {
+      // In the app's usual error shape, so the reason reaches the person.
+      throw Object.assign(new Error(`Could not make a preview video: ${result.reason}.`), { statusCode: 409 });
+    }
+    res.status(202).json(result);
   }),
 };

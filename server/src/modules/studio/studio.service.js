@@ -15,6 +15,8 @@ import {
   requiresPublicUrl,
 } from "../../avatar/capabilities.js";
 import { trainingService } from "../../avatar/training.service.js";
+import { FACE_LIBRARY, findFace, libraryStock } from "../../avatar/faceLibrary.js";
+import { previewService } from "../avatars/preview.service.js";
 import { usageService } from "../billing/usage.service.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
@@ -83,6 +85,51 @@ async function createPersona({ workspace, name, behaviour = {}, gender }) {
   });
 }
 
+/** Whether some configured vendor can turn a photo into an avatar. */
+function photoVendorAvailable() {
+  try {
+    selectProvider({ sourceType: "photo" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A face from the built-in Library becomes an ordinary photo avatar: the same
+ * vendor and the same call as an upload, except the picture is already public
+ * on Unsplash's CDN, so nothing is stored. Only ids from the Library list are
+ * accepted, never a URL from the request.
+ */
+async function createFromLibraryFace({ workspace, faceId, name, gender, behaviour, userId }) {
+  const face = findFace(faceId);
+  if (!face) throw unprocessable(`"${faceId}" is not one of the Library faces`);
+
+  const provider = selectProvider({ sourceType: "photo" });
+  const resolvedName = name?.trim() || face.name;
+  const resolvedGender = gender || face.gender;
+
+  const created = await provider.createFromPhoto({ imageUrl: face.url, name: resolvedName });
+  const persona = await createPersona({ workspace, name: resolvedName, behaviour, gender: resolvedGender });
+
+  const avatar = await Avatar.create({
+    workspaceId: workspace._id,
+    name: resolvedName,
+    gender: resolvedGender,
+    sourceType: "photo",
+    status: created.status === "ready" ? "ready" : "training",
+    providerId: provider.id,
+    providerAvatarId: created.providerAvatarId,
+    previewUrl: created.previewUrl || face.url,
+    personaId: persona._id,
+    createdBy: userId,
+  });
+
+  logger.info({ avatarId: avatar.id, provider: provider.id, face: face.id }, "avatar created from library face");
+  previewService.requestInBackground(avatar._id);
+  return { ...avatar.toObject(), capabilities: CAPABILITIES[provider.id] };
+}
+
 /** Where a ready-made face's gender is recorded on the workspace. */
 const stockKey = (providerId, providerAvatarId) =>
   // Map keys cannot contain dots.
@@ -146,6 +193,8 @@ export const studioService = {
       { avatarId: avatar.id, provider: provider.id, storage: storage.id },
       "avatar created from photo",
     );
+    // The hover clip is made in the background; the create does not wait.
+    previewService.requestInBackground(avatar._id);
 
     return { ...avatar.toObject(), capabilities: CAPABILITIES[provider.id] };
   },
@@ -264,10 +313,15 @@ export const studioService = {
     );
 
     // Untagged faces come back with no gender and appear under both.
-    return groups.flat().map((a) => ({
+    const vendorStock = groups.flat().map((a) => ({
       ...a,
       gender: workspace?.stockGenders?.get(stockKey(a.providerId, a.providerAvatarId)) || null,
     }));
+
+    // The built-in face library follows the vendor's own characters, already
+    // tagged, so the picker is never empty. It needs a vendor that makes photo
+    // avatars; without one, picking a face would only fail.
+    return photoVendorAvailable() ? [...vendorStock, ...libraryStock()] : vendorStock;
   },
 
   /** Records whether a ready-made face is a female or male character. */
@@ -288,6 +342,9 @@ export const studioService = {
    */
   async createFromStock({ workspace, providerId, providerAvatarId, name, gender, behaviour, userId }) {
     await usageService.assertCanCreateAvatar(workspace);
+    if (providerId === FACE_LIBRARY) {
+      return createFromLibraryFace({ workspace, faceId: providerAvatarId, name, gender, behaviour, userId });
+    }
     if (!hasStockAvatars(providerId)) {
       throw unprocessable(`Provider "${providerId}" has no ready-made avatars`);
     }

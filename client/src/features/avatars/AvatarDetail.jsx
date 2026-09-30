@@ -7,6 +7,7 @@ import { studioApi } from "@/services/studio.api";
 import Panel from "@/components/layout/Panel";
 import AvatarSettings from "./AvatarSettings";
 import AvatarChat from "./AvatarChat";
+import AvatarBuild from "./AvatarBuild";
 import AvatarMenu from "./AvatarMenu";
 import { useAutosave } from "./useAutosave";
 
@@ -23,12 +24,13 @@ import { useAutosave } from "./useAutosave";
 const TABS = [
   { id: "chat", label: "Chat", icon: ChatIcon },
   { id: "settings", label: "Settings", icon: SlidersIcon },
+  { id: "build", label: "Build", icon: GlobeIcon },
 ];
 
 export default function AvatarDetail() {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "chat" ? "chat" : "settings";
+  const tab = ["chat", "build"].includes(params.get("tab")) ? params.get("tab") : "settings";
 
   const { data: avatar, isLoading, error } = useQuery({
     queryKey: ["avatar", id],
@@ -56,6 +58,8 @@ export default function AvatarDetail() {
       />
       {tab === "chat" ? (
         <AvatarChat avatar={avatar} />
+      ) : tab === "build" ? (
+        <AvatarBuild avatar={avatar} />
       ) : (
         // Keyed so a different avatar starts from its own values, not the last one's.
         <AvatarSettings key={avatar._id} avatar={avatar} options={options} onChange={autosave.queue} />
@@ -221,6 +225,15 @@ function ChatIcon() {
   return (
     <svg {...stroke}>
       <path d="M8 2.5c3.3 0 5.5 2.1 5.5 4.8S11.3 12 8 12c-.8 0-1.6-.1-2.3-.4L2.5 13l.9-2.6C2.8 9.5 2.5 8.4 2.5 7.3 2.5 4.6 4.7 2.5 8 2.5z" />
+    </svg>
+  );
+}
+
+function GlobeIcon() {
+  return (
+    <svg {...stroke}>
+      <circle cx="8" cy="8" r="5.75" />
+      <path d="M2.25 8h11.5M8 2.25c1.6 1.6 2.3 3.6 2.3 5.75S9.6 12.15 8 13.75C6.4 12.15 5.7 10.15 5.7 8S6.4 3.85 8 2.25z" />
     </svg>
   );
 }

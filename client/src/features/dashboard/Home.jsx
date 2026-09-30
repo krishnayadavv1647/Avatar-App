@@ -301,6 +301,9 @@ function CardAction({ tone, icon, label, detail }) {
 }
 
 function TemplateCard({ preset, onPick }) {
+  // The photo comes from Unsplash's CDN; if it cannot load (offline, blocked),
+  // the card falls back to the accent-tinted icon it always had.
+  const [photoFailed, setPhotoFailed] = useState(false);
   const art = {
     background: [
       `radial-gradient(75% 55% at 50% 45%, color-mix(in srgb, var(--${preset.accent}) 34%, transparent), transparent 75%)`,
@@ -311,12 +314,31 @@ function TemplateCard({ preset, onPick }) {
   return (
     <button type="button" onClick={onPick} title={preset.description} className={CARD}>
       <div style={art} className="absolute inset-0">
-        <div
-          style={{ color: `var(--${preset.accent})` }}
-          className="absolute inset-0 flex items-center justify-center transition-transform duration-300 ease-ease group-hover:scale-110"
-        >
-          <TemplateGlyph id={preset.id} />
-        </div>
+        {preset.image && !photoFailed ? (
+          <>
+            <img
+              src={preset.image}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              onError={() => setPhotoFailed(true)}
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 ease-ease group-hover:scale-[1.03]"
+            />
+            {/* A thin strip of the template's colour ties the photo to its type. */}
+            <div
+              aria-hidden
+              style={{ background: `var(--${preset.accent})` }}
+              className="absolute inset-x-0 bottom-0 h-1"
+            />
+          </>
+        ) : (
+          <div
+            style={{ color: `var(--${preset.accent})` }}
+            className="absolute inset-0 flex items-center justify-center transition-transform duration-300 ease-ease group-hover:scale-110"
+          >
+            <TemplateGlyph id={preset.id} />
+          </div>
+        )}
       </div>
 
       <CardChrome

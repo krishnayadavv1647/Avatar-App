@@ -43,6 +43,25 @@ export default function AvatarMenu({ avatar, buttonClassName, vertical = false, 
     },
   });
 
+  // The hover clip is recorded in the background (about a minute), so the
+  // cards are refreshed a little later to pick it up. LemonSlice agents come
+  // with LemonSlice's own clip, so they are not offered one.
+  const canMakePreview = avatar.callable && !/^agent_/.test(avatar.providerAvatarId || "");
+  const [previewNote, setPreviewNote] = useState(null);
+  const makePreview = useMutation({
+    mutationFn: () => avatarApi.makePreview(avatar._id),
+    onSuccess: () => {
+      setPreviewNote("Making the preview video. It shows up on the card in about a minute.");
+      for (const ms of [45_000, 90_000]) {
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ["avatars"] });
+          queryClient.invalidateQueries({ queryKey: ["avatar", avatar._id] });
+        }, ms);
+      }
+    },
+    onError: (err) => setPreviewNote(err.message),
+  });
+
   const item =
     "flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-ui transition-colors hover:bg-surface-hover";
 
@@ -73,8 +92,21 @@ export default function AvatarMenu({ avatar, buttonClassName, vertical = false, 
               setSharing(true);
             }}
           >
-            Share link
+            Share &amp; embed
           </button>
+          {canMakePreview && (
+            <button
+              type="button"
+              role="menuitem"
+              className={item}
+              onClick={() => {
+                setOpen(false);
+                makePreview.mutate();
+              }}
+            >
+              {avatar.previewVideoUrl ? "Remake preview video" : "Make preview video"}
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -90,6 +122,14 @@ export default function AvatarMenu({ avatar, buttonClassName, vertical = false, 
       )}
 
       {sharing && <ShareDialog avatar={avatar} onClose={() => setSharing(false)} />}
+
+      <Modal
+        open={Boolean(previewNote)}
+        onClose={() => setPreviewNote(null)}
+        title="Preview video"
+        description={previewNote}
+        footer={<Button onClick={() => setPreviewNote(null)}>OK</Button>}
+      />
 
       <Modal
         open={confirming}

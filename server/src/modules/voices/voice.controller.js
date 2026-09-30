@@ -6,8 +6,25 @@ export const voiceController = {
     res.json({ voices: await voiceService.list(req.workspace) });
   }),
 
+  capabilities: asyncHandler(async (req, res) => {
+    res.json(voiceService.capabilities());
+  }),
+
   create: asyncHandler(async (req, res) => {
     const voice = await voiceService.create({ workspace: req.workspace, ...req.body });
+    res.status(201).json({ voice });
+  }),
+
+  clone: asyncHandler(async (req, res) => {
+    const { name, description, gender, language } = req.body;
+    const voice = await voiceService.clone({
+      workspace: req.workspace,
+      name,
+      description,
+      gender,
+      language,
+      file: req.file,
+    });
     res.status(201).json({ voice });
   }),
 

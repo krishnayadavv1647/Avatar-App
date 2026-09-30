@@ -21,6 +21,14 @@ export const avatarApi = {
   setShare: (id, enabled) => api.put(`/avatars/${id}/share`, { enabled }).then((r) => r.share),
   /** New token; every copy of the old link stops working. */
   resetShare: (id) => api.post(`/avatars/${id}/share/reset`).then((r) => r.share),
+
+  /** Sends the avatar into a Zoom / Meet / Teams / Webex meeting: `{ conversationId }`. */
+  joinMeeting: (id, meetingUrl) => api.post(`/avatars/${id}/meeting`, { meetingUrl }),
+  /** Takes it out again, ending that call. */
+  leaveMeeting: (id, conversationId) => api.post(`/avatars/${id}/meeting/${conversationId}/leave`),
+
+  /** Records the card's hover clip in the background: `{ started, reason? }`. */
+  makePreview: (id) => api.post(`/avatars/${id}/preview-video`),
 };
 
 /** The address a share token is opened at. */

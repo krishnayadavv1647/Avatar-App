@@ -40,7 +40,7 @@ export class LemonSliceRenderer extends BaseAvatarRenderer {
     this.avatarSession = null;
   }
 
-  async start({ session, room, avatar }) {
+  async start({ session, room, avatar, idleTimeout }) {
     const agentId = agentIdOf(avatar);
     const image = agentId ? { agentId } : await resolveImage(avatar);
 
@@ -55,6 +55,7 @@ export class LemonSliceRenderer extends BaseAvatarRenderer {
       ...(motion && { agentPrompt: motion }),
       ...(idle && { agentIdlePrompt: idle }),
       ...(renderPayload(avatar) && { extraPayload: renderPayload(avatar) }),
+      ...(idleTimeout && { idleTimeout }),
     });
 
     const sessionId = await this.avatarSession.start(session, room);
@@ -71,8 +72,31 @@ export class LemonSliceRenderer extends BaseAvatarRenderer {
 
   async stop() {
     // aclose(), not close() - the plugin follows the agents framework naming.
+    // It also takes the avatar out of an external meeting, if it joined one.
     await this.avatarSession?.aclose?.();
     this.avatarSession = null;
+  }
+
+  /**
+   * Sends the avatar into a Zoom / Meet / Teams / Webex meeting. LemonSlice
+   * joins as a bot that shows the face and plays the voice there, and streams
+   * the meeting's mixed audio back for our speech-to-text. Must be called
+   * after start() and before the agent session starts.
+   */
+  async joinMeeting(meetingUrl, { botName } = {}) {
+    if (!this.avatarSession) throw new Error("Renderer not started");
+    const result = await this.avatarSession.joinMeeting(meetingUrl, { botName });
+    logger.info({ meetingBotId: result.meetingBotId }, "lemonslice avatar joined meeting");
+    return result;
+  }
+
+  /**
+   * Room I/O for the agent session. After joinMeeting() this switches LiveKit
+   * room audio off in both directions: the avatar hears the meeting instead,
+   * and its voice goes out through the meeting bot.
+   */
+  roomOptions(options) {
+    return this.avatarSession?.roomOptions(options) || options || {};
   }
 
   /**

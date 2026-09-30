@@ -1,4 +1,16 @@
-import { AccessToken, RoomAgentDispatch, RoomConfiguration, RoomServiceClient } from "livekit-server-sdk";
+import {
+  AccessToken,
+  AgentDispatchClient,
+  EgressClient,
+  EgressStatus,
+  EncodedFileOutput,
+  EncodedFileType,
+  EncodingOptions,
+  RoomAgentDispatch,
+  RoomConfiguration,
+  RoomServiceClient,
+  S3Upload,
+} from "livekit-server-sdk";
 import { env } from "../../config/env.js";
 
 /**
@@ -83,3 +95,84 @@ export function getRoomService() {
 export async function endRoom(roomName) {
   await getRoomService().deleteRoom(roomName);
 }
+
+/* ------------------------------------------------------------------------ */
+/* Preview clips                                                             */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Rooms whose job is to record an avatar's hover clip rather than host a call.
+ * The worker tells the two apart by this prefix, so a preview never touches
+ * conversations, transcripts or usage.
+ */
+export const PREVIEW_ROOM_PREFIX = "preview-";
+
+const httpUrl = () => livekitConfig().url.replace(/^ws/, "http");
+
+/**
+ * Sends the agent into a fresh room with nobody else in it. A call's agent is
+ * dispatched by the caller's token; a preview has no caller, so the dispatch
+ * is made directly.
+ */
+export async function dispatchPreview({ roomName, avatarId }) {
+  return dispatchAgent({ roomName, metadata: { preview: true, avatarId } });
+}
+
+/**
+ * Creates a room and sends the agent into it with no one else there - for
+ * jobs with no caller holding a token: a preview recording, or an avatar
+ * going off to sit in an external meeting.
+ */
+export async function dispatchAgent({ roomName, metadata }) {
+  const cfg = livekitConfig();
+  // Short empty timeout: if anything goes wrong the room does not linger.
+  await getRoomService().createRoom({ name: roomName, emptyTimeout: 60, maxParticipants: 4 });
+  const dispatch = new AgentDispatchClient(httpUrl(), cfg.apiKey, cfg.apiSecret);
+  return dispatch.createDispatch(roomName, cfg.agentName, { metadata: JSON.stringify(metadata) });
+}
+
+let egressClient;
+function getEgress() {
+  if (!egressClient) {
+    const cfg = livekitConfig();
+    egressClient = new EgressClient(httpUrl(), cfg.apiKey, cfg.apiSecret);
+  }
+  return egressClient;
+}
+
+/**
+ * Records one video track to an MP4 in the R2 bucket. Video only: the clip
+ * plays muted on hover, so audio would only make the file bigger.
+ */
+export async function recordTrackToR2({ roomName, videoTrackId, key, width, height }) {
+  const { accountId, accessKeyId, secretAccessKey, bucket } = env.storage;
+  const s3 = new S3Upload({
+    accessKey: accessKeyId,
+    secret: secretAccessKey,
+    region: "auto",
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    bucket,
+    forcePathStyle: true,
+  });
+  const file = new EncodedFileOutput({
+    fileType: EncodedFileType.MP4,
+    filepath: key,
+    output: { case: "s3", value: s3 },
+  });
+  return getEgress().startTrackCompositeEgress(roomName, file, {
+    videoTrackId,
+    encodingOptions: new EncodingOptions({ width, height, framerate: 25, videoBitrate: 1200 }),
+  });
+}
+
+export async function stopRecording(egressId) {
+  return getEgress().stopEgress(egressId);
+}
+
+/** The recording's current state, as LiveKit reports it. */
+export async function recordingInfo(egressId) {
+  const [info] = await getEgress().listEgress({ egressId });
+  return info || null;
+}
+
+export { EgressStatus };

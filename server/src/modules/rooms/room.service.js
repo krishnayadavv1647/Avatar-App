@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { Avatar, Conversation, Persona, Voice } from "../../models/index.js";
 import { CAPABILITIES } from "../../avatar/capabilities.js";
 import { getProvider } from "../../avatar/providers/registry.js";
-import { createJoinToken, endRoom } from "../../integrations/livekit/index.js";
+import { createJoinToken, dispatchAgent, endRoom } from "../../integrations/livekit/index.js";
 import { usageService } from "../billing/usage.service.js";
 import { logger } from "../../config/logger.js";
 import { env } from "../../config/env.js";
@@ -31,7 +31,7 @@ export const roomService = {
    * @param {{ workspace: object, avatarId: string, userId?: string,
    *           source?: "app"|"link", guest?: { name: string, email?: string } }} input
    */
-  async startCall({ workspace, avatarId, userId, source = "app", guest }) {
+  async startCall({ workspace, avatarId, userId, source = "app", guest, meetingUrl }) {
     await this.expireStale(workspace._id);
 
     // Checked before anything is created, so a refused call leaves no record
@@ -72,6 +72,14 @@ export const roomService = {
       }
     }
 
+    // Only LemonSlice can carry an avatar into an external meeting, and only
+    // through our own worker.
+    if (meetingUrl && (avatar.providerId !== "lemonslice" || capabilities.pipelineMode !== "render-only")) {
+      const err = new Error("Only LemonSlice avatars can join Zoom, Meet, Teams or Webex meetings.");
+      err.statusCode = 422;
+      throw err;
+    }
+
     const roomName = `call-${crypto.randomUUID()}`;
 
     const conversation = await Conversation.create({
@@ -80,6 +88,7 @@ export const roomService = {
       userId,
       source,
       guest,
+      ...(meetingUrl && { meetingUrl }),
       roomName,
       providerId: avatar.providerId,
       pipelineMode: capabilities.pipelineMode,
@@ -92,8 +101,11 @@ export const roomService = {
     // and cannot apply it later.
     const persona = avatar.personaId ? await Persona.findById(avatar.personaId).lean() : null;
 
-    const connection =
-      capabilities.pipelineMode === "full-pipeline"
+    // A meeting has no caller in our room to carry a token, so the agent is
+    // dispatched directly and told which meeting to join.
+    const connection = meetingUrl
+      ? await startMeetingRoom({ conversation, avatar, roomName, meetingUrl })
+      : capabilities.pipelineMode === "full-pipeline"
         ? await startVendorSession({ avatar, persona, conversation })
         : await startOwnRoom({ conversation, avatar, roomName, userId, guest });
 
@@ -226,6 +238,23 @@ async function startOwnRoom({ conversation, avatar, roomName, userId, guest }) {
   });
 
   return { transport: "livekit", url: serverUrl, token, room: roomName, agentName };
+}
+
+async function startMeetingRoom({ conversation, avatar, roomName, meetingUrl }) {
+  try {
+    await dispatchAgent({
+      roomName,
+      metadata: { conversationId: conversation.id, avatarId: String(avatar._id), meetingUrl },
+    });
+  } catch (err) {
+    // Nothing will ever join this room; do not leave the call holding a slot.
+    await Conversation.updateOne(
+      { _id: conversation._id },
+      { $set: { status: "failed", endedAt: new Date(), endReason: `could not dispatch: ${err.message}` } },
+    );
+    throw err;
+  }
+  return { transport: "meeting", room: roomName };
 }
 
 async function startVendorSession({ avatar, persona, conversation }) {

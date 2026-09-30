@@ -68,7 +68,7 @@ export default function ShareDialog({ avatar, onClose }) {
       open
       onClose={onClose}
       title={`Share ${avatar.name}`}
-      description="Anyone with the link can talk to this avatar - no account needed."
+      description="Share a link, or embed the avatar on your website. Turn the public link on to get both."
       footer={
         <Button variant="ghost" onClick={onClose}>
           Done

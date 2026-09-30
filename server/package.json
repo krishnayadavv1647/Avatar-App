@@ -22,6 +22,7 @@
     "@aws-sdk/client-s3": "^3.1135.0",
     "@livekit/agents": "^1.9.0",
     "@livekit/agents-plugin-anthropic": "^1.9.0",
+    "@livekit/agents-plugin-elevenlabs": "1.9.0",
     "@livekit/agents-plugin-lemonslice": "^1.9.0",
     "@livekit/rtc-node": "^0.13.35",
     "bcryptjs": "^3.0.3",

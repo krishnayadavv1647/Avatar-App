@@ -14,6 +14,12 @@ import { RECOMMENDED_PROMPT } from "../ai/prompts/personality.js";
 import { knowledgePrompt } from "../ai/knowledge.js";
 import { knowledgeService } from "../modules/avatars/knowledge.service.js";
 import { preflight } from "./preflight.js";
+import { isPreviewRoom, runPreview } from "./preview.job.js";
+
+// How long LemonSlice keeps the face up with nothing to say, in a meeting.
+// The default (a minute) suits a one-to-one call, not a meeting that talks
+// among itself for a while.
+const MEETING_IDLE_SECONDS = 600;
 
 /**
  * The realtime worker. One long-lived process, separate from the API, that
@@ -31,6 +37,12 @@ export default defineAgent({
     if (mongoose.connection.readyState === 0) await connectDb();
 
     await ctx.connect();
+
+    // A preview room records the avatar's hover clip; it is not a call.
+    if (isPreviewRoom(ctx.room.name)) {
+      await runPreview(ctx);
+      return;
+    }
 
     const { conversation, avatar } = await resolveJob(ctx);
 
@@ -141,16 +153,40 @@ export default defineAgent({
       tts: pipeline.tts,
     });
 
+    // A meeting call: the avatar sits in someone's Zoom / Meet / Teams / Webex
+    // meeting instead of our room. Meetings have long silences, so the
+    // renderer's idle timeout is stretched; the call's time limit still caps it.
+    const meetingUrl = conversation.meetingUrl;
+
     // The avatar starts with the session in hand and before the session does:
     // LemonSlice takes over the session's audio output so the voice is played
     // through the face. Started without it, the renderer crashed on every call
     // ("reading 'output'") and the caller sat on "Connecting..." for good.
     // Still video first: the face is up while the conversation warms up.
     try {
-      await renderer.start({ session, room: ctx.room, avatar });
+      await renderer.start({
+        session,
+        room: ctx.room,
+        avatar,
+        ...(meetingUrl && { idleTimeout: MEETING_IDLE_SECONDS }),
+      });
     } catch (err) {
       await failStart(err);
       return;
+    }
+
+    // Joined after the renderer starts and before the session does, as the
+    // LemonSlice plugin requires.
+    if (meetingUrl) {
+      try {
+        if (typeof renderer.joinMeeting !== "function") {
+          throw new Error(`${avatar.providerId} avatars cannot join external meetings`);
+        }
+        await renderer.joinMeeting(meetingUrl, { botName: avatar.name });
+      } catch (err) {
+        await failStart(err);
+        return;
+      }
     }
 
     // Keep the placeholder's pulse in step with the agent actually talking.
@@ -182,6 +218,8 @@ export default defineAgent({
       await session.start({
         agent: new voice.Agent({ instructions: instructionsFor(avatar, conversation) }),
         room: ctx.room,
+        // In a meeting, audio comes from and goes to the meeting, not our room.
+        ...(meetingUrl && renderer.roomOptions()),
       });
     } catch (err) {
       await failStart(err);
@@ -248,6 +286,14 @@ function instructionsFor(avatar, conversation) {
   // interviewer that knows who it is talking to sounds like one.
   const guest = conversation.guest?.name;
   if (guest) parts.push(`The person on this call is called ${guest}. Use their name naturally.`);
+
+  if (conversation.meetingUrl) {
+    parts.push(
+      "You have joined a video meeting as one of its participants. Several people may be " +
+        "talking. Reply when someone speaks to you or asks a question, keep answers short, " +
+        "and do not interrupt a conversation between others.",
+    );
+  }
 
   // The knowledge base goes last: reference material, after who the avatar is
   // and who it is talking to.
