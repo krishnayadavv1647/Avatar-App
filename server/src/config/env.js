@@ -107,6 +107,15 @@ export const env = {
   // its URLs from this, so a tunnel host belongs here when testing a real vendor.
   publicBaseUrl: optional("PUBLIC_BASE_URL", `http://localhost:${optional("PORT", "4000")}`),
 
+  // Free hosts sleep a service that gets no traffic; pinging our own public
+  // address prevents it (see config/keepAlive.js). Render supplies
+  // RENDER_EXTERNAL_URL itself, so there it needs no configuration. Keep the
+  // interval under the host's idle limit - Render's is 15 minutes.
+  keepAlive: {
+    url: optional("KEEP_ALIVE_URL", optional("RENDER_EXTERNAL_URL")),
+    minutes: Math.max(1, Number(optional("KEEP_ALIVE_MINUTES", "10")) || 10),
+  },
+
   storageDriver: optional("STORAGE_DRIVER", "local"),
   storage: {
     accountId: optional("R2_ACCOUNT_ID"),

@@ -1,5 +1,6 @@
 import { createApp } from "./app.js";
 import { connectDb } from "./config/db.js";
+import { startKeepAlive } from "./config/keepAlive.js";
 import { env, isProd } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { getStorage } from "./integrations/storage/registry.js";
@@ -47,6 +48,7 @@ async function main() {
   const app = createApp();
   const server = app.listen(env.port, () => {
     logger.info({ port: env.port, provider: env.avatarProvider }, "api listening");
+    startKeepAlive();
   });
 
   // Let in-flight requests finish rather than cutting live connections.
