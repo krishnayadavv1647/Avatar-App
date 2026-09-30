@@ -318,6 +318,8 @@ cli.runApp(
   new ServerOptions({
     agent: fileURLToPath(import.meta.url),
     agentName: env.livekit.agentName,
+    ...(env.agent.idleProcesses && { numIdleProcesses: env.agent.idleProcesses }),
+    ...(env.agent.loadThreshold && { loadThreshold: env.agent.loadThreshold }),
     wsURL: cfg.url,
     apiKey: cfg.apiKey,
     apiSecret: cfg.apiSecret,

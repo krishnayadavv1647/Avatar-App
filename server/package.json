@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
+    "start:all": "node src/start-all.js",
     "agent": "node src/agent/worker.js dev",
     "workers": "node src/workers/index.js",
     "validate": "node src/scripts/validate-models.js",

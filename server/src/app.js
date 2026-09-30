@@ -1,8 +1,9 @@
 import express from "express";
+import fs from "node:fs";
 import path from "node:path";
 import helmet from "helmet";
 import cors from "cors";
-import { env } from "./config/env.js";
+import { env, isProd } from "./config/env.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
 import { livekitConfig } from "./integrations/livekit/index.js";
 import { implementedProviderIds } from "./avatar/providers/registry.js";
@@ -19,12 +20,44 @@ import adminRoutes from "./modules/admin/admin.routes.js";
 import { authenticate, requireAuth } from "./middleware/auth.js";
 import { getStorage } from "./integrations/storage/registry.js";
 
+/**
+ * Where the built web app is, if this API should serve it. One service then
+ * carries the whole product - the pages, the API and (with start-all.js) the
+ * agent worker. Off in development, where Vite serves the app, unless forced.
+ */
+function webAppDir() {
+  if (env.serveClient === "false") return null;
+  if (!isProd && env.serveClient !== "true") return null;
+  const dir = path.resolve(import.meta.dirname, "../../client/dist");
+  return fs.existsSync(path.join(dir, "index.html")) ? dir : null;
+}
+
 export function createApp() {
   const app = express();
 
+  const webApp = webAppDir();
+
   // crossOriginResourcePolicy off: uploaded images are served from this origin
   // and rendered by the client on another one during development.
-  app.use(helmet({ crossOriginResourcePolicy: false }));
+  const apiHeaders = helmet({ crossOriginResourcePolicy: false });
+
+  // The web app's pages need looser headers than the API: they load photos and
+  // clips from other hosts (Unsplash, R2) and open a LiveKit connection, which
+  // helmet's default content policy forbids, and /embed is meant to be framed
+  // by other sites. Everything else helmet sets is kept.
+  const pageHeaders = helmet({
+    crossOriginResourcePolicy: false,
+    contentSecurityPolicy: false,
+    frameguard: false,
+  });
+  app.use((req, res, next) => {
+    if (!webApp || req.path.startsWith("/api/") || req.path.startsWith("/uploads/")) {
+      return apiHeaders(req, res, next);
+    }
+    // Only the embed may be framed elsewhere; the app itself may not.
+    if (!req.path.startsWith("/embed/")) res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    return pageHeaders(req, res, next);
+  });
   app.use(cors({ origin: env.clientOrigin, credentials: true }));
   app.use(express.json({ limit: "1mb" }));
 
@@ -74,6 +107,21 @@ export function createApp() {
   // Webhooks are called by vendors, not users - they authenticate by the
   // signed callback URL instead of a bearer token.
   app.use("/api/webhooks", providerWebhooks);
+
+  // The web app, when this API also serves it: its built files, and index.html
+  // for every other page address so the client-side router can take over
+  // (/avatars, /talk/:token, a refresh on any page). API paths are excluded, so
+  // an unknown /api route still answers with JSON rather than a web page.
+  if (webApp) {
+    app.use(express.static(webApp, { index: false, maxAge: "1h" }));
+    app.get(/^\/(?!api\/|uploads\/).*/, (req, res, next) => {
+      // A missing file (an old bundle, a typo) is a 404, not the home page.
+      if (path.extname(req.path)) return next();
+      // index.html names the hashed bundles, so it must never be cached.
+      res.setHeader("Cache-Control", "no-cache");
+      res.sendFile(path.join(webApp, "index.html"));
+    });
+  }
 
   app.use(notFound);
   app.use(errorHandler);

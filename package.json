@@ -11,7 +11,12 @@
     "install:all": "npm install && npm --prefix client install && npm --prefix server install",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "validate": "npm --prefix server run validate"
+    "validate": "npm --prefix server run validate",
+    "build": "npm --prefix client ci --include=dev && npm --prefix client run build && npm --prefix server ci --omit=dev",
+    "start": "npm --prefix server run start:all"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

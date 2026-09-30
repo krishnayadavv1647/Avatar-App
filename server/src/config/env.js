@@ -33,7 +33,14 @@ function devSecret(kind) {
 export const env = {
   nodeEnv: optional("NODE_ENV", "development"),
   port: Number(optional("PORT", "4000")),
-  clientOrigin: optional("CLIENT_ORIGIN", "http://localhost:5173"),
+  // On Render the service's own public address is a sensible default: when the
+  // API also serves the web app (see SERVE_CLIENT), they share one origin.
+  clientOrigin: optional("CLIENT_ORIGIN", optional("RENDER_EXTERNAL_URL", "http://localhost:5173")),
+
+  // Serve the built web app (client/dist) from this API, so the whole product
+  // is one service. On in production when a build exists; "false" turns it off
+  // for setups that host the web app elsewhere, "true" forces it in development.
+  serveClient: optional("SERVE_CLIENT"),
 
   // Platform admins - the people who can open /admin and see every user.
   // Configured here rather than stored on the user, so no API call can grant it.
@@ -75,6 +82,16 @@ export const env = {
     apiKey: optional("LIVEKIT_API_KEY"),
     apiSecret: optional("LIVEKIT_API_SECRET"),
     agentName: optional("AGENT_NAME", "avatar-agent"),
+  },
+
+  // Tuning for the agent worker on a small machine. In production the agents
+  // SDK keeps up to four job processes warm and refuses new calls above 70%
+  // CPU load - generous on a real server, fatal on a small shared instance
+  // (out of memory, or "avatar hasn't joined" because the worker says it is
+  // full). Unset means the SDK's defaults.
+  agent: {
+    idleProcesses: Number(optional("AGENT_IDLE_PROCESSES")) || undefined,
+    loadThreshold: Number(optional("AGENT_LOAD_THRESHOLD")) || undefined,
   },
 
   deepgramApiKey: optional("DEEPGRAM_API_KEY"),
