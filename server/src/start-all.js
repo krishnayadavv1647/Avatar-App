@@ -15,15 +15,20 @@ import path from "node:path";
  * which looks healthy and cannot take a single call.
  *
  * Small-instance defaults for the worker are set here unless the environment
- * already says otherwise: one warm job process rather than four, and a high
- * load threshold so a modest shared CPU does not make it refuse calls.
+ * already says otherwise. They come from running on a fractional-CPU free
+ * instance, where the SDK's own defaults left the worker registered but
+ * useless: one warm job process rather than four; no refusing calls for load
+ * (load is measured against the instance's own small CPU quota, so it reads
+ * ~1.0 whenever anything runs); and two minutes, not ten seconds, for a job
+ * process to start.
  */
 const serverDir = path.resolve(import.meta.dirname, "..");
 
 const env = {
   ...process.env,
   AGENT_IDLE_PROCESSES: process.env.AGENT_IDLE_PROCESSES || "1",
-  AGENT_LOAD_THRESHOLD: process.env.AGENT_LOAD_THRESHOLD || "0.95",
+  AGENT_LOAD_THRESHOLD: process.env.AGENT_LOAD_THRESHOLD || "2",
+  AGENT_INIT_TIMEOUT_MS: process.env.AGENT_INIT_TIMEOUT_MS || "120000",
 };
 
 const parts = [

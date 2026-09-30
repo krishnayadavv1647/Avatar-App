@@ -91,7 +91,14 @@ export const env = {
   // full). Unset means the SDK's defaults.
   agent: {
     idleProcesses: Number(optional("AGENT_IDLE_PROCESSES")) || undefined,
+    // Load is CPU use as a fraction of the instance's own CPU quota, so on a
+    // fractional-CPU instance almost any work reads as ~1.0. A value above 1
+    // means "never refuse a call for load".
     loadThreshold: Number(optional("AGENT_LOAD_THRESHOLD")) || undefined,
+    // How long a job process may take to start. The SDK allows 10 seconds,
+    // which a slow shared CPU cannot meet: the process is killed and retried
+    // forever ("runner initialization timed out") and never takes a call.
+    initTimeoutMs: Number(optional("AGENT_INIT_TIMEOUT_MS")) || undefined,
   },
 
   deepgramApiKey: optional("DEEPGRAM_API_KEY"),

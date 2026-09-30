@@ -320,6 +320,7 @@ cli.runApp(
     agentName: env.livekit.agentName,
     ...(env.agent.idleProcesses && { numIdleProcesses: env.agent.idleProcesses }),
     ...(env.agent.loadThreshold && { loadThreshold: env.agent.loadThreshold }),
+    ...(env.agent.initTimeoutMs && { initializeProcessTimeout: env.agent.initTimeoutMs }),
     wsURL: cfg.url,
     apiKey: cfg.apiKey,
     apiSecret: cfg.apiSecret,
