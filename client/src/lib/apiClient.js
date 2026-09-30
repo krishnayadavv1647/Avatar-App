@@ -71,7 +71,27 @@ async function request(path, options = {}) {
   }
 
   const text = await res.text();
-  const payload = text ? JSON.parse(text) : null;
+  let payload = null;
+  let json = true;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    json = false;
+  }
+
+  // The API always answers in JSON, and only a 204 has no body. An empty or
+  // HTML "success" means the request never reached the API - typically the web
+  // app is hosted apart from it and VITE_API_BASE still points at its own
+  // host. Saying so beats a "cannot destructure null" further up the page.
+  if (res.ok && res.status !== 204 && (!json || payload === null)) {
+    const error = new Error(
+      `No API answered at ${new URL(`${BASE}${path}`, window.location.href).href} ` +
+        `(got ${json ? "an empty response" : "a web page"}, status ${res.status}). ` +
+        `If the web app and the API are hosted separately, set VITE_API_BASE to the API's full address and rebuild.`,
+    );
+    error.status = res.status;
+    throw error;
+  }
 
   if (!res.ok) {
     // A blocked account is signed out on the spot rather than left on pages
