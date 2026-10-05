@@ -54,6 +54,16 @@ export const avatarValidation = {
     }),
   },
   leaveMeeting: { params: z.object({ id: objectId, conversationId: objectId }) },
+  // Multipart: an `image` file, or a Library face id as a text field.
+  replaceVisuals: {
+    params: z.object({ id: objectId }),
+    body: z.object({
+      faceId: z
+        .string()
+        .regex(/^face_[fm]\d{2}$/, "Unknown Library face")
+        .optional(),
+    }),
+  },
   setShare: {
     params: z.object({ id: objectId }),
     body: z.object({ enabled: z.boolean() }),

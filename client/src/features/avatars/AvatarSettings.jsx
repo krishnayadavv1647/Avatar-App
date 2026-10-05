@@ -3,6 +3,7 @@ import clsx from "clsx";
 import MediaPreview from "@/components/media/MediaPreview";
 import KnowledgeBase from "./KnowledgeBase";
 import CustomVoices, { useCustomVoices } from "./CustomVoices";
+import EditVisualsDialog from "./EditVisualsDialog";
 
 /**
  * An avatar's settings, laid out like LemonSlice's: a section label with a
@@ -261,6 +262,14 @@ function Visuals({ avatar, render, options, onRender }) {
   const renderable = avatar.providerId === "lemonslice";
   const unsupported = renderable ? undefined : "Only LemonSlice avatars have render options";
 
+  // A LemonSlice agent's face is managed in LemonSlice's own dashboard.
+  const [editing, setEditing] = useState(false);
+  const isAgent = /^agent_/.test(avatar.providerAvatarId || "");
+  const editBlocked = isAgent
+    ? "This avatar is a LemonSlice agent - change its face in the LemonSlice dashboard"
+    : undefined;
+  const editable = !isAgent;
+
   return (
     <div className="relative overflow-hidden rounded-xl border border-border bg-surface-3">
       {avatar.previewUrl && (
@@ -299,9 +308,10 @@ function Visuals({ avatar, render, options, onRender }) {
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
-            disabled
-            title="Coming soon"
-            className="flex h-9 items-center gap-2 rounded-full border border-white/10 bg-black/55 px-4 text-ui font-medium text-white backdrop-blur disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => setEditing(true)}
+            disabled={!editable}
+            title={editable ? "Give this avatar a new face" : editBlocked}
+            className="flex h-9 items-center gap-2 rounded-full border border-white/10 bg-black/55 px-4 text-ui font-medium text-white backdrop-blur transition-colors hover:bg-black/70 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <PencilIcon />
             Edit avatar visuals
@@ -333,6 +343,8 @@ function Visuals({ avatar, render, options, onRender }) {
           </PillSelect>
         </div>
       </div>
+
+      {editing && <EditVisualsDialog avatar={avatar} onClose={() => setEditing(false)} />}
     </div>
   );
 }

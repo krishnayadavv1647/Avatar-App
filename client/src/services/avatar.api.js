@@ -27,6 +27,14 @@ export const avatarApi = {
   /** Takes it out again, ending that call. */
   leaveMeeting: (id, conversationId) => api.post(`/avatars/${id}/meeting/${conversationId}/leave`),
 
+  /** A new face: `{ file }` (an uploaded photo) or `{ faceId }` (a Library face). */
+  replaceVisuals: (id, { file, faceId }) => {
+    const form = new FormData();
+    if (file) form.append("image", file);
+    if (faceId) form.append("faceId", faceId);
+    return api.upload(`/avatars/${id}/visuals`, form).then((r) => r.avatar);
+  },
+
   /** Records the card's hover clip in the background: `{ started, reason? }`. */
   makePreview: (id) => api.post(`/avatars/${id}/preview-video`),
 };

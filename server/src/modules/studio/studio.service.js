@@ -17,6 +17,7 @@ import {
 import { trainingService } from "../../avatar/training.service.js";
 import { FACE_LIBRARY, findFace, libraryStock } from "../../avatar/faceLibrary.js";
 import { previewService } from "../avatars/preview.service.js";
+import { agentIdOf } from "../../avatar/providers/lemonslice.provider.js";
 import { usageService } from "../billing/usage.service.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
@@ -399,6 +400,91 @@ export const studioService = {
   },
 
   /**
+   * "Edit avatar visuals": gives an existing avatar a new face - an uploaded
+   * photo or one of the Library faces - keeping its name, brief, voice and
+   * history. The new picture goes through the same checks and the same vendor
+   * call as a new photo avatar; the hover clip is remade for the new face.
+   *
+   * A LemonSlice agent's face lives in LemonSlice's dashboard, not here, so
+   * those are refused with a pointer there rather than silently detached.
+   */
+  async replaceVisuals({ workspace, avatarId, file, faceId, userId }) {
+    const avatar = await Avatar.findOne({ _id: avatarId, workspaceId: workspace._id });
+    if (!avatar) {
+      const err = new Error("Avatar not found");
+      err.statusCode = 404;
+      throw err;
+    }
+    if (agentIdOf(avatar)) {
+      throw conflict("This avatar is a LemonSlice agent - change its face in the LemonSlice dashboard.");
+    }
+    if (!CAPABILITIES[avatar.providerId]?.photoAvatar) {
+      throw unprocessable(`${avatar.providerId} avatars cannot be given a new photo.`);
+    }
+    if (!file && !faceId) throw unprocessable("Choose a photo or a Library face.");
+
+    const provider = getProvider(avatar.providerId);
+    let imageUrl;
+    let asset = null;
+    let stored = null;
+    const storage = getStorage();
+
+    if (faceId) {
+      const face = findFace(faceId);
+      if (!face) throw unprocessable(`"${faceId}" is not one of the Library faces`);
+      imageUrl = face.url;
+    } else {
+      assertUsableImage(file);
+      assertStorageServes(provider.id, storage);
+      stored = await storage.put({
+        buffer: file.buffer,
+        key: `${workspace._id}/avatars/${crypto.randomUUID()}${extensionFor(file)}`,
+        contentType: file.mimetype,
+      });
+      asset = await AvatarAsset.create({
+        workspaceId: workspace._id,
+        kind: "image",
+        storageKey: stored.storageKey,
+        publicUrl: stored.publicUrl,
+        bytes: stored.bytes,
+        mime: file.mimetype,
+        checksum: crypto.createHash("sha256").update(file.buffer).digest("hex"),
+        uploadedBy: userId,
+      });
+      imageUrl = stored.publicUrl;
+    }
+
+    let created;
+    try {
+      created = await provider.createFromPhoto({ imageUrl, name: avatar.name });
+    } catch (err) {
+      // The vendor refused the picture; the avatar keeps its old face.
+      if (stored) await storage.remove(stored.storageKey).catch(() => {});
+      if (asset) await AvatarAsset.deleteOne({ _id: asset._id });
+      throw err;
+    }
+
+    await Avatar.updateOne(
+      { _id: avatar._id },
+      {
+        $set: {
+          providerAvatarId: created.providerAvatarId,
+          previewUrl: created.previewUrl || imageUrl,
+          sourceType: "photo",
+          ...(asset && { assetId: asset._id }),
+        },
+        // The old talking clip shows the old face; a new one is made below.
+        $unset: { previewVideoUrl: "", ...(!asset && { assetId: "" }) },
+      },
+    );
+
+    logger.info({ avatarId: String(avatar._id), source: faceId ? `face ${faceId}` : "upload" }, "avatar visuals replaced");
+    previewService.requestInBackground(avatar._id);
+
+    return Avatar.findById(avatar._id).lean();
+  },
+
+  /**
    * What the studio can offer right now. The client renders from this rather
    * than from a hardcoded list, so a vendor that is configured but unusable
    * never appears as a choice.
@@ -509,5 +595,11 @@ function extensionFor(file) {
 function unprocessable(message) {
   const err = new Error(message);
   err.statusCode = 422;
+  return err;
+}
+
+function conflict(message) {
+  const err = new Error(message);
+  err.statusCode = 409;
   return err;
 }

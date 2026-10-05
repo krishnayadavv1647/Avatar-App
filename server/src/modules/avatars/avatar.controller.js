@@ -1,6 +1,7 @@
 import { avatarService } from "./avatar.service.js";
 import { knowledgeService } from "./knowledge.service.js";
 import { previewService } from "./preview.service.js";
+import { studioService } from "../studio/studio.service.js";
 import { roomService } from "../rooms/room.service.js";
 import { asyncHandler } from "../../middleware/validate.js";
 
@@ -76,6 +77,18 @@ export const avatarController = {
         endReason: "removed from meeting",
       }),
     );
+  }),
+
+  /** "Edit avatar visuals": a new photo or Library face for an existing avatar. */
+  replaceVisuals: asyncHandler(async (req, res) => {
+    await studioService.replaceVisuals({
+      workspace: req.workspace,
+      avatarId: req.params.id,
+      file: req.file,
+      faceId: req.body.faceId,
+      userId: req.auth?.userId,
+    });
+    res.json({ avatar: await avatarService.get(req.workspace._id, req.params.id) });
   }),
 
   /** Makes (or remakes) the avatar's hover clip; see preview.service.js. */

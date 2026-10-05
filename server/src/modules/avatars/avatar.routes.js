@@ -12,6 +12,12 @@ const uploadDocument = multer({
   limits: { fileSize: MAX_FILE_BYTES, files: 1 },
 });
 
+// Same limits as a new photo avatar's upload; the service checks the type.
+const uploadImage = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+});
+
 const router = Router();
 
 router.use(resolveWorkspace);
@@ -47,6 +53,15 @@ router.post(
   "/:id/meeting/:conversationId/leave",
   validate(avatarValidation.leaveMeeting),
   avatarController.leaveMeeting,
+);
+
+// A new face for an existing avatar: an uploaded photo or a Library face.
+// Multer first, so the multipart text field exists when validation runs.
+router.post(
+  "/:id/visuals",
+  uploadImage.single("image"),
+  validate(avatarValidation.replaceVisuals),
+  avatarController.replaceVisuals,
 );
 
 // The short talking clip shown when hovering the avatar's card.
