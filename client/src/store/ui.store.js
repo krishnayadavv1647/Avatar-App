@@ -23,4 +23,9 @@ export const useUi = create((set, get) => ({
     }
     set({ sidebarCollapsed: next });
   },
+
+  // The navigation drawer on phones and small tablets. Never persisted: a
+  // drawer left open on reload would cover the page someone just asked for.
+  navOpen: false,
+  setNavOpen: (navOpen) => set({ navOpen }),
 }));

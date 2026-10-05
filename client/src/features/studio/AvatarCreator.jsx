@@ -162,8 +162,10 @@ export default function AvatarCreator() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-bg text-text">
-      <main className="relative flex min-w-0 flex-1 flex-col">
+    // Side by side from lg up; on phones the face is on top, the choices below
+    // it, and the page scrolls with the create button pinned to the bottom.
+    <div className="flex min-h-screen flex-col bg-bg text-text lg:h-screen lg:flex-row lg:overflow-hidden">
+      <main className="relative flex min-w-0 flex-col lg:flex-1">
         {/* The chosen face, blurred behind everything, so the stage takes on its light. */}
         {selected && (
           <img
@@ -187,12 +189,12 @@ export default function AvatarCreator() {
           <h1 className="text-h3 font-medium">Avatar creator</h1>
         </header>
 
-        <div className="relative flex min-h-0 flex-1 flex-col items-center px-6 pb-4">
+        <div className="relative flex min-h-0 flex-1 flex-col items-center px-4 pb-4 sm:px-6">
           <div className="flex min-h-0 w-full flex-1 items-center justify-center">
             <div
               {...dropProps}
               className={clsx(
-                "relative aspect-[2/3] h-full max-w-full overflow-hidden rounded-lg transition-colors",
+                "relative aspect-[2/3] h-[min(50dvh,420px)] max-w-full overflow-hidden rounded-lg transition-colors lg:h-full",
                 selected ? "border border-border-strong" : "border border-dashed",
                 dragging
                   ? "border-pink bg-pink-dim"
@@ -279,8 +281,8 @@ export default function AvatarCreator() {
         />
       </main>
 
-      <aside className="flex w-[330px] shrink-0 flex-col border-l border-border bg-surface">
-        <div className="flex-1 space-y-7 overflow-y-auto px-5 pb-5 pt-6">
+      <aside className="flex w-full shrink-0 flex-col border-t border-border bg-surface lg:w-[330px] lg:border-l lg:border-t-0">
+        <div className="flex-1 space-y-7 px-4 pb-5 pt-6 sm:px-5 lg:overflow-y-auto">
           {noVendor && (
             <p className="rounded border border-border-strong bg-surface-2 px-4 py-3 text-ui text-yellow">
               No avatar vendor is set up, so a photo cannot be animated yet. Add{" "}
@@ -325,7 +327,7 @@ export default function AvatarCreator() {
 
           <section>
             <h2 className="text-ui font-medium">Library</h2>
-            <div className="mt-3 grid grid-cols-3 gap-2.5">
+            <div className="mt-3 grid grid-cols-3 gap-2.5 sm:grid-cols-4 lg:grid-cols-3">
               <button
                 type="button"
                 onClick={choose}
@@ -390,7 +392,8 @@ export default function AvatarCreator() {
           </section>
         </div>
 
-        <div className="shrink-0 border-t border-border p-4">
+        <div className="sticky bottom-0 z-10 shrink-0 border-t border-border bg-surface p-4 lg:static">
+
           {create.isError && <p className="mb-3 text-ui text-red">{create.error.message}</p>}
           {missing && <p className="mb-3 text-ui text-text-faint">{missing}</p>}
           <div className="flex h-11 overflow-hidden rounded-sm bg-text text-text-inverse">

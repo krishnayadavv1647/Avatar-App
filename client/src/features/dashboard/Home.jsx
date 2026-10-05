@@ -216,7 +216,7 @@ function AvatarSlide({ avatar }) {
 function HeroCopy({ bold, light, subtitle, action }) {
   return (
     <div className="absolute inset-y-0 left-0 z-10 flex max-w-[min(640px,100%)] flex-col justify-center px-8 sm:px-10">
-      <h1 className="text-[44px] uppercase leading-[0.95] tracking-tight sm:text-[56px]">
+      <h1 className="text-[34px] uppercase leading-[0.95] tracking-tight sm:text-[44px] lg:text-[56px]">
         <span className="block font-extrabold">{bold}</span>
         <span className="block truncate font-normal">{light}</span>
       </h1>

@@ -72,8 +72,10 @@ function Header({ avatar, tab, onTab, autosave }) {
   const navigate = useNavigate();
 
   return (
-    <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-4 rounded-t-xl bg-surface/90 px-6 py-5 backdrop-blur">
-      <div className="flex min-w-0 items-center gap-3">
+    // On phones the name gets its own line and the tabs span the width below
+    // it; it sticks under the app's top bar there, and at the top on desktop.
+    <header className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 rounded-t-xl bg-surface/90 px-4 py-4 backdrop-blur sm:gap-4 sm:px-6 sm:py-5 lg:top-0">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <button
           type="button"
           onClick={() => navigate("/avatars")}
@@ -83,11 +85,16 @@ function Header({ avatar, tab, onTab, autosave }) {
           <ChevronLeftIcon />
         </button>
         <EditableName name={avatar.name} onRename={(name) => autosave.queue({ name }, { now: true })} />
+        <span className="ml-auto sm:hidden">
+          <SaveStatus status={autosave.status} error={autosave.error} />
+        </span>
       </div>
 
-      <div className="flex items-center gap-3">
-        <SaveStatus status={autosave.status} error={autosave.error} />
-        <div role="tablist" className="flex gap-1 rounded-lg border border-border bg-bg p-1">
+      <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-3">
+        <span className="hidden sm:inline">
+          <SaveStatus status={autosave.status} error={autosave.error} />
+        </span>
+        <div role="tablist" className="flex flex-1 gap-1 rounded-lg border border-border bg-bg p-1 sm:flex-none">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -96,7 +103,7 @@ function Header({ avatar, tab, onTab, autosave }) {
               aria-selected={tab === id}
               onClick={() => onTab(id)}
               className={clsx(
-                "flex h-9 items-center gap-2 rounded-sm border px-4 text-ui font-medium transition-colors",
+                "flex h-9 flex-1 items-center justify-center gap-2 rounded-sm border px-2 text-ui font-medium transition-colors sm:flex-none sm:px-4",
                 tab === id
                   ? "border-border-strong bg-surface-2 text-text"
                   : "border-transparent text-text-muted hover:text-text",
@@ -111,7 +118,7 @@ function Header({ avatar, tab, onTab, autosave }) {
           avatar={avatar}
           vertical
           onDeleted={() => navigate("/avatars")}
-          buttonClassName="flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-bg text-text-muted transition-colors hover:text-text"
+          buttonClassName="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg text-text-muted transition-colors hover:text-text"
         />
       </div>
     </header>

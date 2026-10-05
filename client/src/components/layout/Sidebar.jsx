@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { authApi } from "@/services/auth.api";
 import { useAuth } from "@/store/auth.store";
 import { useUi } from "@/store/ui.store";
@@ -53,17 +53,69 @@ const itemClass = (collapsed) =>
     collapsed ? "justify-center px-0" : "px-3",
   );
 
+const DESKTOP = "(min-width: 1024px)";
+
+/**
+ * Whether the lg breakpoint applies. Below it the sidebar is a drawer opened
+ * from the top bar (see AppShell), because a fixed 232px column leaves a phone
+ * almost no room for the page. Re-checked on resize as well as on the media
+ * query, since a page loaded in a hidden frame may never get the change event.
+ */
+function useIsDesktop() {
+  const [desktop, setDesktop] = useState(() => window.matchMedia?.(DESKTOP).matches ?? true);
+  useEffect(() => {
+    const query = window.matchMedia?.(DESKTOP);
+    if (!query) return undefined;
+    const update = () => setDesktop(query.matches);
+    query.addEventListener("change", update);
+    window.addEventListener("resize", update);
+    update();
+    return () => {
+      query.removeEventListener("change", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+  return desktop;
+}
+
 export default function Sidebar() {
-  const collapsed = useUi((s) => s.sidebarCollapsed);
+  const desktop = useIsDesktop();
+  // Collapsing to icons is a desktop preference; the drawer always has labels.
+  const collapsed = useUi((s) => s.sidebarCollapsed) && desktop;
   const { isAdmin } = useIsAdmin();
   const sections = isAdmin ? [...SECTIONS, ADMIN_SECTION] : SECTIONS;
   const toggle = useUi((s) => s.toggleSidebar);
+  const navOpen = useUi((s) => s.navOpen);
+  const setNavOpen = useUi((s) => s.setNavOpen);
+  const { pathname } = useLocation();
+
+  // Following a link closes the drawer, as does growing past the breakpoint.
+  useEffect(() => setNavOpen(false), [pathname, desktop, setNavOpen]);
+
+  useEffect(() => {
+    if (!navOpen) return undefined;
+    const onKey = (e) => e.key === "Escape" && setNavOpen(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [navOpen, setNavOpen]);
+
+  const drawer = !desktop;
+  const hidden = drawer && !navOpen;
 
   return (
+    <>
+      {drawer && navOpen && (
+        <div aria-hidden onClick={() => setNavOpen(false)} className="fixed inset-0 z-40 bg-black/60" />
+      )}
     <aside
+      aria-label="Main navigation"
+      // Inert while off-screen, so its links cannot be tabbed to.
+      inert={hidden || undefined}
       className={clsx(
-        "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-bg transition-[width] duration-200 ease-ease",
+        "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-bg transition-[width,transform] duration-200 ease-ease",
         collapsed ? "w-[var(--sidebar-w-collapsed)]" : "w-sidebar",
+        hidden ? "-translate-x-full" : "translate-x-0",
+        drawer && navOpen && "shadow-lg",
       )}
     >
       <div
@@ -78,15 +130,26 @@ export default function Sidebar() {
             <span className="font-semibold">Avatar App</span>
           </span>
         )}
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="flex h-8 w-8 items-center justify-center rounded-sm border border-border text-text-muted transition-colors hover:border-border-strong hover:text-text"
-        >
-          <PanelIcon />
-        </button>
+        {drawer ? (
+          <button
+            type="button"
+            onClick={() => setNavOpen(false)}
+            aria-label="Close navigation"
+            className="flex h-10 w-10 items-center justify-center rounded-sm text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
+          >
+            <CloseIcon />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="flex h-8 w-8 items-center justify-center rounded-sm border border-border text-text-muted transition-colors hover:border-border-strong hover:text-text"
+          >
+            <PanelIcon />
+          </button>
+        )}
       </div>
 
       <nav className={clsx("flex-1 overflow-y-auto pb-4 pt-3", collapsed ? "px-2" : "px-3")}>
@@ -132,6 +195,7 @@ export default function Sidebar() {
         <AccountCard collapsed={collapsed} />
       </div>
     </aside>
+    </>
   );
 }
 
@@ -240,6 +304,14 @@ const stroke = {
   "aria-hidden": true,
   className: "shrink-0",
 };
+
+function CloseIcon() {
+  return (
+    <svg {...stroke}>
+      <path d="m4 4 8 8M12 4l-8 8" />
+    </svg>
+  );
+}
 
 function PanelIcon() {
   return (

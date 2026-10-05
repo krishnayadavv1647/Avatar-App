@@ -26,6 +26,17 @@ import { useCall } from "./useCall";
  * its own iframe - that case falls back to DailyCall.
  */
 const ASPECT = { "2x3": "aspect-[2/3]", "9x16": "aspect-[9/16]", "1x1": "aspect-square" };
+const RATIO = { "2x3": 2 / 3, "9x16": 9 / 16, "1x1": 1 };
+
+/**
+ * The frame is sized by its width, never wider than the screen: as tall as
+ * fits under the page header (at most 700px), unless the screen is too narrow
+ * for that, in which case it takes the full width and its height follows from
+ * the aspect ratio. Sizing it by height let a portrait frame run off a phone.
+ */
+const frameWidth = (ratio) => ({
+  width: `min(100%, calc(min(700px, 100dvh - 11rem) * ${ratio}))`,
+});
 
 export default function PortraitCall({ avatar }) {
   const { connection, starting, ending, error, setError, start, hangUp } = useCall(avatar._id);
@@ -38,14 +49,15 @@ export default function PortraitCall({ avatar }) {
     );
   }
 
+  const aspect = ASPECT[avatar.render?.aspectRatio] ? avatar.render.aspectRatio : "2x3";
   const frame = clsx(
-    "relative h-[min(700px,calc(100vh-11rem))] max-w-full overflow-hidden rounded-[40px] bg-surface-2",
-    ASPECT[avatar.render?.aspectRatio] || ASPECT["2x3"],
+    "relative overflow-hidden rounded-[28px] bg-surface-2 sm:rounded-[40px]",
+    ASPECT[aspect],
   );
 
   return (
-    <div className="flex flex-col items-center">
-      <div className={frame}>
+    <div className="flex w-full flex-col items-center">
+      <div className={frame} style={frameWidth(RATIO[aspect])}>
         {connection ? (
           <LiveKitRoom
             token={connection.token}
