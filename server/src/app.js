@@ -49,6 +49,9 @@ export function createApp() {
     crossOriginResourcePolicy: false,
     contentSecurityPolicy: false,
     frameguard: false,
+    // Google's sign-in popup reports back to this page; plain "same-origin"
+    // severs that link and the popup closes without signing anyone in.
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
   });
   app.use((req, res, next) => {
     if (!webApp || req.path.startsWith("/api/") || req.path.startsWith("/uploads/")) {

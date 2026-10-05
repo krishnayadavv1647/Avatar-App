@@ -6,6 +6,7 @@ import { useAuth } from "@/store/auth.store";
 import Card from "@/components/common/Card";
 import Button from "@/components/common/Button";
 import Field from "@/components/forms/Field";
+import GoogleButton from "./GoogleButton";
 
 /**
  * Sign in and sign up share a form because they differ by one field and one
@@ -36,7 +37,15 @@ export default function SignIn({ mode = "login" }) {
     },
   });
 
-  const canSubmit = email.trim() && password.length >= (isRegister ? 10 : 1) && !submit.isPending;
+  const google = useMutation({
+    mutationFn: authApi.google,
+    onSuccess: (session) => {
+      setSession(session);
+      navigate(location.state?.from || "/", { replace: true });
+    },
+  });
+
+  const canSubmit =email.trim() && password.length >= (isRegister ? 10 : 1) && !submit.isPending;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-gutter py-16">
@@ -59,6 +68,16 @@ export default function SignIn({ mode = "login" }) {
       )}
 
       <Card className="mt-8">
+        <GoogleButton
+          onCredential={(credential) => google.mutate(credential)}
+          disabled={google.isPending || submit.isPending}
+          label={isRegister ? "signup_with" : "continue_with"}
+        />
+        {google.isError && (
+          <p className="-mt-2 mb-5 rounded border border-red-line bg-red-dim px-4 py-3 text-ui text-red">
+            {google.error.message}
+          </p>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();

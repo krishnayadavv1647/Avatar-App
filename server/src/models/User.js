@@ -3,7 +3,10 @@ import mongoose from "mongoose";
 const userSchema = new mongoose.Schema(
   {
     email: { type: String, required: true, lowercase: true, trim: true, unique: true },
-    passwordHash: { type: String, required: true, select: false },
+    // Absent for accounts made through Google, which never set a password.
+    passwordHash: { type: String, select: false },
+    // Google's stable account id ("sub"), once the person has used Google sign-in.
+    googleId: { type: String, unique: true, sparse: true },
     name: { type: String, trim: true },
     workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", index: true },
     role: { type: String, enum: ["owner", "admin", "member"], default: "owner" },

@@ -22,3 +22,7 @@ process.env.ANTHROPIC_API_KEY = "";
 // the suite exercises.
 process.env.LEMONSLICE_API_KEY = "";
 process.env.ADMIN_EMAILS = "admin@example.com";
+
+// A made-up client id; tests/integration/google-auth.test.js signs its own
+// tokens for it with a key it pretends Google published.
+process.env.GOOGLE_CLIENT_ID = "test-client.apps.googleusercontent.com";

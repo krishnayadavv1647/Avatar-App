@@ -63,6 +63,12 @@ export const env = {
     refreshTtl: optional("JWT_REFRESH_TTL", "30d"),
   },
 
+  // "Continue with Google". The OAuth Web client id from Google Cloud Console;
+  // the browser asks for it at /api/auth/config. Unset hides the button.
+  google: {
+    clientId: optional("GOOGLE_CLIENT_ID"),
+  },
+
   // Deliberately no default. Defaulting to the stub meant every install
   // silently preferred it over real, configured vendors - including ones where
   // someone had paid for a key. Unset now means "pick the cheapest real vendor",

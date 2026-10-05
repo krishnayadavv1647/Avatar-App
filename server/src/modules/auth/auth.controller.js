@@ -1,5 +1,7 @@
 import { authService } from "./auth.service.js";
+import { googleEnabled } from "./google.js";
 import { asyncHandler } from "../../middleware/validate.js";
+import { env } from "../../config/env.js";
 
 export const authController = {
   register: asyncHandler(async (req, res) => {
@@ -9,6 +11,15 @@ export const authController = {
   login: asyncHandler(async (req, res) => {
     res.json(await authService.login(req.body));
   }),
+
+  google: asyncHandler(async (req, res) => {
+    res.json(await authService.google(req.body));
+  }),
+
+  /** What the sign-in page needs before anyone is signed in. */
+  config: (req, res) => {
+    res.json({ googleClientId: googleEnabled() ? env.google.clientId : null });
+  },
 
   refresh: asyncHandler(async (req, res) => {
     res.json(await authService.refresh(req.body.refreshToken));

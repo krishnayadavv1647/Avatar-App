@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Plan, Subscription, User, Workspace } from "../../models/index.js";
 import { accountBlocked } from "./blocked.js";
+import { verifyGoogleIdToken } from "./google.js";
 import { env } from "../../config/env.js";
 
 const ROUNDS = 12;
@@ -29,31 +30,47 @@ export const authService = {
       throw conflict("That email cannot be used");
     }
 
-    const user = await User.create({
+    const { user, workspace } = await createAccount({
       email,
       passwordHash: await bcrypt.hash(password, ROUNDS),
       name,
-      role: "owner",
-    });
-
-    const workspace = await Workspace.create({
-      name: workspaceName || `${name || email.split("@")[0]}'s workspace`,
-      ownerId: user._id,
-    });
-
-    user.workspaceId = workspace._id;
-    await user.save();
-
-    // New accounts start on the admin's default plan when there is one.
-    const plan = await Plan.findOne({ isDefault: true, active: true }).lean();
-    await Subscription.create({
-      workspaceId: workspace._id,
-      plan: plan?.key || "free",
-      ...(plan && { planId: plan._id, assignedAt: new Date() }),
-      status: "active",
+      workspaceName,
     });
 
     return { user: publicUser(user), workspace, ...issueTokens(user) };
+  },
+
+  /**
+   * "Continue with Google": signs in, or creates the account on first use.
+   * An existing email/password account with the same (Google-verified) address
+   * is the same person, so it is linked rather than duplicated.
+   */
+  async google({ credential }) {
+    const profile = await verifyGoogleIdToken(credential);
+
+    let user = await User.findOne({ googleId: profile.sub });
+    if (!user) {
+      user = await User.findOne({ email: profile.email });
+      // Already linked to a different Google account - not ours to take over.
+      if (user?.googleId) throw unauthorized("This email is linked to another Google account");
+    }
+
+    if (!user) {
+      const { user: created, workspace } = await createAccount({
+        email: profile.email,
+        googleId: profile.sub,
+        name: profile.name,
+      });
+      return { user: publicUser(created), workspace, ...issueTokens(created) };
+    }
+
+    if (user.blockedAt) throw accountBlocked();
+    user.googleId = profile.sub;
+    if (!user.name && profile.name) user.name = profile.name;
+    user.lastLoginAt = new Date();
+    await user.save();
+
+    return { user: publicUser(user), ...issueTokens(user) };
   },
 
   async login({ email, password }) {
@@ -101,6 +118,36 @@ export const authService = {
     await User.updateOne({ _id: userId }, { $inc: { tokenVersion: 1 } });
   },
 };
+
+/** A user, their workspace, and a subscription on the default plan. */
+async function createAccount({ email, passwordHash, googleId, name, workspaceName }) {
+  const user = await User.create({
+    email,
+    ...(passwordHash && { passwordHash }),
+    ...(googleId && { googleId }),
+    name,
+    role: "owner",
+  });
+
+  const workspace = await Workspace.create({
+    name: workspaceName || `${name || email.split("@")[0]}'s workspace`,
+    ownerId: user._id,
+  });
+
+  user.workspaceId = workspace._id;
+  await user.save();
+
+  // New accounts start on the admin's default plan when there is one.
+  const plan = await Plan.findOne({ isDefault: true, active: true }).lean();
+  await Subscription.create({
+    workspaceId: workspace._id,
+    plan: plan?.key || "free",
+    ...(plan && { planId: plan._id, assignedAt: new Date() }),
+    status: "active",
+  });
+
+  return { user, workspace };
+}
 
 function issueTokens(user) {
   const payload = {

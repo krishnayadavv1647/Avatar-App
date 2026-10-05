@@ -26,6 +26,8 @@ const router = Router();
 
 router.post("/register", credentialLimiter, validate(authValidation.register), authController.register);
 router.post("/login", credentialLimiter, validate(authValidation.login), authController.login);
+router.post("/google", credentialLimiter, validate(authValidation.google), authController.google);
+router.get("/config", authController.config);
 router.post("/refresh", validate(authValidation.refresh), authController.refresh);
 router.post("/logout", requireAuth, authController.logout);
 router.get("/me", requireAuth, resolveWorkspace, authController.me);

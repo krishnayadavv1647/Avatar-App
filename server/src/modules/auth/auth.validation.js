@@ -17,6 +17,10 @@ export const authValidation = {
       password: z.string().min(1).max(200),
     }),
   },
+  google: {
+    // The ID token from Google's button; verified in google.js.
+    body: z.object({ credential: z.string().min(20).max(4096) }),
+  },
   refresh: {
     body: z.object({ refreshToken: z.string().min(1) }),
   },
