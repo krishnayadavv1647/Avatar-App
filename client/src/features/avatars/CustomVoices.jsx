@@ -23,7 +23,13 @@ export function useCustomVoices() {
 export default function CustomVoices({ selected, onAdded }) {
   const queryClient = useQueryClient();
   const { data: voices = [], isLoading } = useCustomVoices();
-  const [cloning, setCloning] = useState(false);
+  const [dialog, setDialog] = useState(null); // clone | import
+
+  const added = (voice) => {
+    queryClient.invalidateQueries({ queryKey: KEY });
+    setDialog(null);
+    onAdded?.(voice);
+  };
 
   const remove = useMutation({
     mutationFn: voiceApi.remove,
@@ -41,7 +47,7 @@ export default function CustomVoices({ selected, onAdded }) {
         </div>
         <button
           type="button"
-          onClick={() => setCloning(true)}
+          onClick={() => setDialog("clone")}
           className="flex h-9 shrink-0 items-center gap-2 rounded-sm border border-border-strong bg-bg px-4 text-ui font-semibold text-text transition-colors hover:bg-surface-3"
         >
           <WaveGlyph />
@@ -62,13 +68,17 @@ export default function CustomVoices({ selected, onAdded }) {
                   )}
                 </p>
                 <p className="truncate text-label text-text-faint">
-                  {v.provider === "elevenlabs" ? "Instant voice clone" : "Added from LiveKit Cloud"}
+                  {v.imported
+                    ? "From your ElevenLabs account"
+                    : v.provider === "elevenlabs"
+                      ? "Instant voice clone"
+                      : "Added from LiveKit Cloud"}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => {
-                  const also = v.provider === "elevenlabs" ? " It is deleted from ElevenLabs too." : "";
+                  const also = v.provider === "elevenlabs" && !v.imported ? " It is deleted from ElevenLabs too." : "";
                   if (window.confirm(`Remove "${v.name}" from your voices?${also}`)) remove.mutate(v._id);
                 }}
                 disabled={remove.isPending}
@@ -83,16 +93,10 @@ export default function CustomVoices({ selected, onAdded }) {
       )}
       {remove.error && <p className="mt-2 text-ui text-red">{remove.error.message}</p>}
 
-      {cloning && (
-        <CloneVoiceDialog
-          onClose={() => setCloning(false)}
-          onAdded={(voice) => {
-            queryClient.invalidateQueries({ queryKey: KEY });
-            setCloning(false);
-            onAdded?.(voice);
-          }}
-        />
+      {dialog === "clone" && (
+        <CloneVoiceDialog onClose={() => setDialog(null)} onImport={() => setDialog("import")} onAdded={added} />
       )}
+      {dialog === "import" && <ImportVoiceDialog onClose={() => setDialog(null)} onAdded={added} />}
     </div>
   );
 }
@@ -133,7 +137,7 @@ function audioSeconds(blob) {
  * held in this dialog and in the upload; the server passes it to ElevenLabs
  * without storing it.
  */
-function CloneVoiceDialog({ onClose, onAdded }) {
+function CloneVoiceDialog({ onClose, onAdded, onImport }) {
   const { data: caps, isLoading: checking } = useQuery({
     queryKey: ["voice-capabilities"],
     queryFn: voiceApi.capabilities,
@@ -193,6 +197,14 @@ function CloneVoiceDialog({ onClose, onAdded }) {
           <p className="rounded border border-border-strong bg-surface-2 px-4 py-3 text-ui text-yellow">
             Voice cloning is not set up on this server yet. Add ELEVENLABS_API_KEY to server/.env and restart
             the server.
+          </p>
+        )}
+        {!unavailable && (
+          <p className="text-ui text-text-muted">
+            Already cloned it on ElevenLabs?{" "}
+            <button type="button" onClick={onImport} className="text-pink hover:underline">
+              Add it by its voice ID
+            </button>
           </p>
         )}
 
@@ -308,6 +320,62 @@ function CloneVoiceDialog({ onClose, onAdded }) {
         {clone.error && (
           <p className="text-ui text-red">{clone.error.details?.[0]?.message || clone.error.message}</p>
         )}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * A voice already in the ElevenLabs account - cloned on elevenlabs.io rather
+ * than here - added by its voice id. The server checks it with ElevenLabs.
+ */
+function ImportVoiceDialog({ onClose, onAdded }) {
+  const [voiceId, setVoiceId] = useState("");
+  const [name, setName] = useState("");
+  const add = useMutation({
+    mutationFn: () => voiceApi.importElevenLabs({ voiceId: voiceId.trim(), name: name.trim() || undefined }),
+    onSuccess: onAdded,
+  });
+  const ready = /^[A-Za-z0-9]{10,40}$/.test(voiceId.trim()) && !add.isPending;
+
+  return (
+    <Modal
+      open
+      onClose={() => !add.isPending && onClose()}
+      title="Add an ElevenLabs voice"
+      description="For a voice you cloned on elevenlabs.io. In ElevenLabs open My Voices, click the voice's ⋯ menu and copy its ID."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={add.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={() => add.mutate()} disabled={!ready}>
+            {add.isPending ? "Checking…" : "Add Voice"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <Field label="Voice ID">
+          <input
+            value={voiceId}
+            autoFocus
+            maxLength={40}
+            placeholder="e.g. 21m00Tcm4TlvDq8ikWAM"
+            onChange={(e) => setVoiceId(e.target.value)}
+            className={clsx(inputClass, "font-mono")}
+          />
+        </Field>
+        <Field label="Name">
+          <input
+            value={name}
+            maxLength={60}
+            placeholder="Optional - the ElevenLabs name is used otherwise"
+            onChange={(e) => setName(e.target.value)}
+            className={inputClass}
+          />
+        </Field>
+        {add.error && <p className="text-ui text-red">{add.error.details?.[0]?.message || add.error.message}</p>}
       </div>
     </Modal>
   );

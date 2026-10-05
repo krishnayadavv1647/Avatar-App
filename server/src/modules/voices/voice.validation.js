@@ -31,5 +31,17 @@ export const voiceValidation = {
       }),
     }),
   },
+  // A voice already in the ElevenLabs account, by the id elevenlabs.io shows.
+  importElevenLabs: {
+    body: z.object({
+      voiceId: z
+        .string()
+        .trim()
+        .regex(/^[A-Za-z0-9]{10,40}$/, "Paste the voice ID from ElevenLabs (My Voices → ID)"),
+      name: name.optional(),
+      gender,
+      language,
+    }),
+  },
   remove: { params: z.object({ voiceId: objectId }) },
 };

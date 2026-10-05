@@ -11,6 +11,10 @@ const voiceSchema = new mongoose.Schema(
     language: { type: String, default: "en" },
     gender: { type: String, enum: ["female", "male"] },
     previewUrl: String,
+    // An ElevenLabs voice made outside the app and added here by its id.
+    // Removing it only removes it here - the app did not create it, so it
+    // leaves it in the ElevenLabs account.
+    imported: { type: Boolean, default: false },
     // Stock voices are shared across workspaces and cannot be edited or deleted.
     isStock: { type: Boolean, default: false },
   },

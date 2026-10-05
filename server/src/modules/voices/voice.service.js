@@ -105,6 +105,40 @@ export const voiceService = {
     return voice.toObject();
   },
 
+  /**
+   * Adds a voice already in the ElevenLabs account - cloned on elevenlabs.io
+   * rather than here - by its voice id. ElevenLabs is asked first, so a typo
+   * or a voice from some other account is refused now rather than mid-call.
+   */
+  async importElevenLabs({ workspace, voiceId, name, gender, language }) {
+    if (!env.elevenlabs.apiKey) throw fail("ElevenLabs is not set up: add ELEVENLABS_API_KEY on the server.", 503);
+
+    const providerVoiceId = toElevenLabsVoice(voiceId);
+    const existing = await Voice.findOne({ workspaceId: workspace._id, provider: "elevenlabs", providerVoiceId });
+    if (existing) throw fail(`This voice is already added as "${existing.name}"`, 409);
+
+    let found;
+    try {
+      found = await elevenLabs(`/voices/${encodeURIComponent(voiceId)}`);
+    } catch (err) {
+      if (err.upstreamStatus === 400 || err.upstreamStatus === 404) {
+        throw fail("ElevenLabs has no voice with that ID in this account", 404);
+      }
+      throw err;
+    }
+
+    const voice = await Voice.create({
+      workspaceId: workspace._id,
+      provider: "elevenlabs",
+      providerVoiceId,
+      name: name || found.name || "ElevenLabs voice",
+      gender: gender || (["female", "male"].includes(found.labels?.gender) ? found.labels.gender : undefined),
+      imported: true,
+      ...(language && { language }),
+    });
+    return voice.toObject();
+  },
+
   async remove({ workspace, voiceId }) {
     const voice = await Voice.findOne({ _id: voiceId, workspaceId: workspace._id, provider: { $in: PROVIDERS } });
     if (!voice) throw fail("Voice not found", 404);
@@ -112,7 +146,7 @@ export const voiceService = {
     // Removing a clone here removes it at ElevenLabs too, so the person's voice
     // is not left behind in the account. Best effort: if ElevenLabs already
     // lost it, or the key has changed, the record still goes.
-    if (voice.provider === "elevenlabs" && env.elevenlabs.apiKey) {
+    if (voice.provider === "elevenlabs" && !voice.imported && env.elevenlabs.apiKey) {
       await elevenLabs(`/voices/${encodeURIComponent(elevenLabsVoiceId(voice.providerVoiceId))}`, {
         method: "DELETE",
       }).catch((err) => logger.warn({ err: err.message, voiceId }, "elevenlabs voice not deleted"));

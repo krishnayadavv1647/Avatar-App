@@ -28,6 +28,11 @@ export const voiceController = {
     res.status(201).json({ voice });
   }),
 
+  importElevenLabs: asyncHandler(async (req, res) => {
+    const voice = await voiceService.importElevenLabs({ workspace: req.workspace, ...req.body });
+    res.status(201).json({ voice });
+  }),
+
   remove: asyncHandler(async (req, res) => {
     await voiceService.remove({ workspace: req.workspace, voiceId: req.params.voiceId });
     res.status(204).end();

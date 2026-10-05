@@ -20,5 +20,8 @@ export const voiceApi = {
     form.append("sample", sample, fileName);
     return (await api.upload("/voices/clone", form)).voice;
   },
+  /** Adds a voice already cloned on elevenlabs.io, by its voice id. */
+  importElevenLabs: async ({ voiceId, name }) =>
+    (await api.post("/voices/import", { voiceId, ...(name && { name }) })).voice,
   remove: (id) => api.del(`/voices/${id}`),
 };

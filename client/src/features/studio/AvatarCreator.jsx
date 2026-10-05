@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { studioApi } from "@/services/studio.api";
 import { PRESETS, briefFromPreset } from "./presets";
+import { useCustomVoices } from "@/features/avatars/CustomVoices";
 
 /**
  * The avatar creator: a full-window page, not a dialog.
@@ -47,6 +48,9 @@ export default function AvatarCreator() {
   const [fileError, setFileError] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [gender, setGender] = useState("female");
+  // One of the workspace's own (cloned) voices, or "" for the usual voice.
+  const [ownVoice, setOwnVoice] = useState("");
+  const { data: customVoices = [] } = useCustomVoices();
 
   const { data: options } = useQuery({ queryKey: ["studio-options"], queryFn: studioApi.options });
   const limits = options?.limits.photo;
@@ -103,7 +107,9 @@ export default function AvatarCreator() {
 
   // Only a template's own brief is sent; a ready-made face otherwise keeps the
   // settings its vendor already has, and everything else is edited afterwards.
-  const behaviour = preset ? briefFromPreset(preset) : undefined;
+  // A chosen clone rides along with it.
+  const brief = preset ? briefFromPreset(preset) : undefined;
+  const behaviour = ownVoice ? { ...brief, voice: ownVoice } : brief;
 
   const create = useMutation({
     mutationFn: () =>
@@ -323,6 +329,26 @@ export default function AvatarCreator() {
                 </button>
               ))}
             </div>
+            {customVoices.length > 0 && (
+              <label className="mt-3 block">
+                <span className="text-label text-text-muted">Speaks with</span>
+                <select
+                  value={ownVoice}
+                  disabled={busy}
+                  onChange={(e) => setOwnVoice(e.target.value)}
+                  className="mt-1.5 h-10 w-full cursor-pointer rounded border border-border-strong bg-bg px-3 text-ui font-medium text-text outline-none [color-scheme:dark] focus:border-text-muted disabled:opacity-50"
+                >
+                  <option value="">Default {gender} voice</option>
+                  <optgroup label="Your voices">
+                    {customVoices.map((v) => (
+                      <option key={v._id} value={v.providerVoiceId}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </label>
+            )}
           </section>
 
           <section>
