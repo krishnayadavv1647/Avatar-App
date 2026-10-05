@@ -1,0 +1,18 @@
+# Keep the agent image small and free of local secrets and data.
+node_modules
+logs
+*.log
+uploads
+tmp
+tests
+coverage
+.env
+.env.*
+!.env.example
+
+# Local scratch files with tokens or call payloads - never ship them.
+*.json
+!package.json
+!package-lock.json
+*.tmp
+*.txt
