@@ -245,7 +245,7 @@ function Shell({ children, wide = false, embedded = false }) {
         {children}
       </main>
       <footer className="pb-6 text-center text-label text-text-faint">
-        <span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-pink align-middle" aria-hidden />
+        <img src="/logo.png" alt="" aria-hidden className="mr-1.5 inline-block h-4 w-4 object-contain align-middle" />
         Avatar App
       </footer>
     </div>

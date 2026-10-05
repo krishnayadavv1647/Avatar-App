@@ -39,7 +39,7 @@ export default function AppShell({ children, wide = false }) {
             </svg>
           </button>
           <span className="flex items-center gap-2">
-            <span className="h-5 w-5 rounded-[6px] bg-pink" aria-hidden />
+            <img src="/logo.png" alt="" aria-hidden className="h-6 w-6 shrink-0 object-contain" />
             <span className="text-ui font-semibold">Avatar App</span>
           </span>
         </header>

@@ -126,7 +126,7 @@ export default function Sidebar() {
       >
         {!collapsed && (
           <span className="flex items-center gap-2">
-            <span className="h-6 w-6 rounded bg-pink" aria-hidden />
+            <img src="/logo.png" alt="" aria-hidden className="h-7 w-7 shrink-0 object-contain" />
             <span className="font-semibold">Avatar App</span>
           </span>
         )}
