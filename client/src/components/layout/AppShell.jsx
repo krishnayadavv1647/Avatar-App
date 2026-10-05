@@ -40,7 +40,7 @@ export default function AppShell({ children, wide = false }) {
           </button>
           <span className="flex items-center gap-2">
             <img src="/logo.png" alt="" aria-hidden className="h-6 w-6 shrink-0 object-contain" />
-            <span className="text-ui font-semibold">Avatar App</span>
+            <span className="text-ui font-semibold">Avatar Studio</span>
           </span>
         </header>
 

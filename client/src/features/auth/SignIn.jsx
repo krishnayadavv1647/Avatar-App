@@ -42,7 +42,7 @@ export default function SignIn({ mode = "login" }) {
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-gutter py-16">
       <div className="mb-8 flex items-center gap-2">
         <img src="/logo.png" alt="" aria-hidden className="h-8 w-8 shrink-0 object-contain" />
-        <span className="font-medium">Avatar App</span>
+        <span className="font-medium">Avatar Studio</span>
       </div>
 
       <h1>{isRegister ? "Create your workspace" : "Sign in"}</h1>

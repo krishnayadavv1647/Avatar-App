@@ -1,4 +1,4 @@
-# Avatar App
+# Avatar Studio
 
 Interactive AI avatar platform. Upload a photo or record a video, get a talking
 avatar, and hold a real-time voice conversation with it in the browser.

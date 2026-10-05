@@ -1,5 +1,5 @@
 /**
- * Avatar App website widget.
+ * Avatar Studio website widget.
  *
  *   <script src="https://YOUR-APP/embed.js" data-token="SHARE_TOKEN" async></script>
  *

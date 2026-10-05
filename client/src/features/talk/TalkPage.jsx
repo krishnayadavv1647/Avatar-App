@@ -246,7 +246,7 @@ function Shell({ children, wide = false, embedded = false }) {
       </main>
       <footer className="pb-6 text-center text-label text-text-faint">
         <img src="/logo.png" alt="" aria-hidden className="mr-1.5 inline-block h-4 w-4 object-contain align-middle" />
-        Avatar App
+        Avatar Studio
       </footer>
     </div>
   );
