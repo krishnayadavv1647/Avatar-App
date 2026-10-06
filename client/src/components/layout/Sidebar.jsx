@@ -34,6 +34,7 @@ const SECTIONS = [
     items: [
       { to: "/conversations", label: "Conversations", icon: ChatIcon },
       { to: "/analytics", label: "Usage", icon: ChartIcon },
+      { to: "/connect", label: "AI tools", icon: PlugIcon },
     ],
   },
 ];
@@ -362,6 +363,14 @@ function ChatIcon() {
   return (
     <svg {...stroke}>
       <path d="M14 9.5a2 2 0 0 1-2 2H6l-3 2.5v-3H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2Z" />
+    </svg>
+  );
+}
+
+function PlugIcon() {
+  return (
+    <svg {...stroke}>
+      <path d="M6 2v3M10 2v3M4 5h8v3a4 4 0 0 1-8 0V5zM8 12v2" />
     </svg>
   );
 }

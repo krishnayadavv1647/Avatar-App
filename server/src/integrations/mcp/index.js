@@ -52,7 +52,7 @@ export async function assertSafeUrl(raw) {
   } catch {
     throw reject("That is not a valid URL");
   }
-  if (!["https:", "http:"].includes(url.protocol)) throw reject("The MCP server URL must start with https://");
+  if (!["https:", "http:"].includes(url.protocol)) throw reject("The URL must start with https://");
 
   const host = url.hostname.replace(/^\[|\]$/g, "");
   const addresses = net.isIP(host)
@@ -60,8 +60,8 @@ export async function assertSafeUrl(raw) {
     : (await dns.lookup(host, { all: true }).catch(() => { throw reject(`Could not resolve ${host}`); })).map((a) => a.address);
 
   const local = addresses.some(isPrivateIp);
-  if (local && isProd) throw reject("MCP servers on private or local addresses are not allowed");
-  if (url.protocol === "http:" && !local && isProd) throw reject("The MCP server URL must use https://");
+  if (local && isProd) throw reject("Private or local addresses are not allowed");
+  if (url.protocol === "http:" && !local && isProd) throw reject("The URL must use https://");
   return url;
 }
 

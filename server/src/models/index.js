@@ -13,3 +13,4 @@ export { Subscription } from "./Subscription.js";
 export { Plan } from "./Plan.js";
 export { AuditLog } from "./AuditLog.js";
 export { McpServer } from "./McpServer.js";
+export { ApiKey } from "./ApiKey.js";

@@ -16,6 +16,8 @@ import authRoutes from "./modules/auth/auth.routes.js";
 import analyticsRoutes from "./modules/analytics/analytics.routes.js";
 import conversationRoutes from "./modules/conversations/conversation.routes.js";
 import linkRoutes from "./modules/links/link.routes.js";
+import apiKeyRoutes from "./modules/apiKeys/apiKey.routes.js";
+import mcpRoutes from "./modules/mcp/mcp.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
 import { authenticate, requireAuth } from "./middleware/auth.js";
 import { getStorage } from "./integrations/storage/registry.js";
@@ -100,6 +102,9 @@ export function createApp() {
   app.use("/api/voices", requireAuth, voiceRoutes);
   app.use("/api/analytics", requireAuth, analyticsRoutes);
   app.use("/api/conversations", requireAuth, conversationRoutes);
+  app.use("/api/api-keys", requireAuth, apiKeyRoutes);
+  // The app as an MCP server. It authenticates with its own API key, not a session.
+  app.use("/api/mcp", mcpRoutes);
   // Platform admin. Signed in to reach it; ADMIN_EMAILS to get past /access.
   app.use("/api/admin", requireAuth, adminRoutes);
 

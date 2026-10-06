@@ -9,6 +9,7 @@ import AvatarCreator from "@/features/studio/AvatarCreator";
 import CallRoom from "@/features/call/CallRoom";
 import TalkPage from "@/features/talk/TalkPage";
 import Usage from "@/features/analytics/Usage";
+import ConnectAiTools from "@/features/connect/ConnectAiTools";
 import ConversationList from "@/features/conversations/ConversationList";
 import ConversationDetail from "@/features/conversations/ConversationDetail";
 import DesignPreview from "@/features/_design/DesignPreview";
@@ -50,6 +51,7 @@ export default function AppRouter() {
         }
       />
       <Route path="/analytics" element={app(<Usage />)} />
+      <Route path="/connect" element={app(<ConnectAiTools />)} />
       <Route path="/conversations" element={app(<ConversationList />)} />
       <Route path="/conversations/:id" element={app(<ConversationDetail />)} />
 
