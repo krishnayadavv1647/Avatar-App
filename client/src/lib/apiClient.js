@@ -127,6 +127,20 @@ async function request(path, options = {}) {
   return payload;
 }
 
+/** A response that is a file, not JSON (a generated picture). Same token and 401 retry as the rest. */
+async function requestBlob(path) {
+  let res = await send(path);
+  if (res.status === 401 && (await refreshTokens())) res = await send(path);
+
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const error = new Error(payload?.error?.message || `Request failed (${res.status})`);
+    error.status = res.status;
+    throw error;
+  }
+  return res.blob();
+}
+
 export const api = {
   get: (path) => request(path),
   post: (path, body) => request(path, { method: "POST", body }),
@@ -134,4 +148,5 @@ export const api = {
   patch: (path, body) => request(path, { method: "PATCH", body }),
   del: (path) => request(path, { method: "DELETE" }),
   upload: (path, form) => request(path, { method: "POST", form }),
+  blob: requestBlob,
 };

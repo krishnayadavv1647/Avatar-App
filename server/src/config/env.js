@@ -68,6 +68,13 @@ export const env = {
   // beside the API); Render sets RENDER_EXTERNAL_URL on the API service itself.
   publicUrl: optional("PUBLIC_URL") || optional("RENDER_EXTERNAL_URL"),
 
+  // Kie.ai: generates and edits the pictures in the avatar creator (Flux Kontext).
+  // Can also be saved from Admin -> API Keys, which wins over this variable.
+  kie: {
+    apiKey: optional("KIE_API_KEY"),
+    baseUrl: optional("KIE_BASE_URL", "https://api.kie.ai").replace(/\/+$/, ""),
+  },
+
   // Outgoing email (invitations, mailing, support replies) through Resend.
   // Unset, those features still work but show the link/failure instead of sending.
   mail: {

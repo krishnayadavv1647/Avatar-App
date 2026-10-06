@@ -5,6 +5,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { studioApi } from "@/services/studio.api";
 import { PRESETS, briefFromPreset } from "./presets";
 import { useCustomVoices } from "@/features/avatars/CustomVoices";
+import CropDialog from "./CropDialog";
+import EnhanceDialog from "./EnhanceDialog";
+import GenerateDialog from "./GenerateDialog";
+import EditImageDialog from "./EditImageDialog";
+import PreviewDialog from "./PreviewDialog";
+import ToolMenu from "./ToolMenu";
+import { canvasToFile, editError, loadImage, transformImage } from "./imageTools";
 
 /**
  * The avatar creator: a full-window page, not a dialog.
@@ -24,8 +31,16 @@ import { useCustomVoices } from "@/features/avatars/CustomVoices";
  * A dashboard template arrives as `?template=<id>` and becomes the starting
  * brief, sent silently with the create.
  *
- * The canvas tools are laid out but not wired yet: the server takes no edited
- * image on create, so they are disabled rather than pretending to work.
+ * The tools under the face edit it in the browser: Enhance, Crop, rotate and
+ * flip (in the ... menu) each produce a new picture, and an edited picture is
+ * simply an uploaded photo - which is what the server takes on create. A
+ * library face can be edited too (it becomes a photo); a vendor's own avatar
+ * cannot, because it is an agent on their side, not a picture. Preview shows
+ * the face large, playing its clip when it has one.
+ *
+ * The wand opens "Generate image" (describe a face, the image service makes it)
+ * and "Edit image" (describe a change to the current face). Colour and
+ * brightness adjustments live in the ... menu.
  */
 
 const SOON = "Coming soon";
@@ -148,6 +163,119 @@ export default function AvatarCreator() {
 
   const choose = () => fileInput.current?.click();
 
+  // ---- picture tools --------------------------------------------------------
+  const [tool, setTool] = useState(null); // "crop" | "enhance" | "preview" | "generate" | "aiedit"
+  const [working, setWorking] = useState(false);
+  const [toolError, setToolError] = useState(null);
+
+  // A vendor's own avatar is an agent on their side, not a picture to edit.
+  const editable = Boolean(selected) && (selected.kind === "upload" || selected.providerId === "library");
+  const editInfo = {
+    name: selected?.file?.name || selected?.label,
+    type: selected?.file?.type === "image/png" ? "image/png" : "image/jpeg",
+    maxBytes: limits?.maxBytes,
+  };
+  // How a preview starts, per kind of face: a photo or a Library face becomes a
+  // hidden draft that records a clip. A face that already has a clip just plays it.
+  const previewStart =
+    !selected || selected.videoUrl
+      ? null
+      : selected.kind === "upload"
+        ? () => studioApi.preview.fromPhoto({ file: selected.file, name: "Untitled avatar", gender, behaviour })
+        : selected.providerId === "library"
+          ? () => studioApi.preview.fromStock({ providerAvatarId: selected.providerAvatarId, gender, behaviour })
+          : null;
+  const toolHint = !selected ? "Pick a face first" : "A vendor's avatar can't be edited here";
+
+  // Whether the image service is set up, from the server, so the dialogs can say
+  // so before anyone types a prompt. Editing also needs public image storage.
+  const imageGen = options?.imageGeneration;
+  const generateUnavailable =
+    options && !imageGen?.generate
+      ? "Image generation is not set up yet. An admin can add a Kie.ai key under Admin > API Keys."
+      : null;
+  const editUnavailable =
+    generateUnavailable ||
+    (options && !imageGen?.edit
+      ? "Editing needs public image storage, which this server does not have set up. Generating still works."
+      : null);
+
+  /** The face as a File, for the image service: an upload already is one. */
+  const currentFile = async () =>
+    selected.kind === "upload"
+      ? selected.file
+      : canvasToFile(transformImage(await loadImage(selected.url)), editInfo);
+
+  /** An edited picture becomes the face - always as an uploaded photo. */
+  const applyEdit = (file) => {
+    const url = URL.createObjectURL(file);
+    urls.current.push(url);
+    const item = {
+      id: url,
+      kind: "upload",
+      file,
+      url,
+      label: file.name,
+      gender: selected.gender || gender,
+      // What "Reset edits" goes back to: the face as it was before the first edit.
+      original: selected.original || selected,
+    };
+    setUploads((items) => [item, ...items.filter((i) => i.id !== selected.id)]);
+    setSelectedId(item.id);
+    setFileError(null);
+    setToolError(null);
+    setTool(null);
+  };
+
+  /** A one-step edit (rotate, flip): runs, then becomes the face. */
+  const quickEdit = async (render) => {
+    setWorking(true);
+    setToolError(null);
+    try {
+      applyEdit(await render());
+    } catch (err) {
+      setToolError(editError(err));
+    } finally {
+      setWorking(false);
+    }
+  };
+  const transform = (options) =>
+    quickEdit(async () => canvasToFile(transformImage(await loadImage(selected.url), options), editInfo));
+
+  const download = async () => {
+    setWorking(true);
+    setToolError(null);
+    try {
+      const file =
+        selected.kind === "upload"
+          ? selected.file
+          : await canvasToFile(transformImage(await loadImage(selected.url)), editInfo);
+      const href = URL.createObjectURL(file);
+      const link = Object.assign(document.createElement("a"), { href, download: file.name });
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(href), 1000);
+    } catch (err) {
+      setToolError(editError(err));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const resetEdits = () => {
+    const { original } = selected;
+    setUploads((items) => {
+      const rest = items.filter((i) => i.id !== selected.id);
+      return original.kind === "upload" ? [original, ...rest] : rest;
+    });
+    setSelectedId(original.id);
+    setToolError(null);
+  };
+
+  const removePhoto = () => {
+    setUploads((items) => items.filter((i) => i.id !== selected.id));
+    setSelectedId(null);
+  };
+
   // Back to wherever they came from; a direct visit has nowhere to go back to.
   const back = () => (window.history.state?.idx > 0 ? navigate(-1) : navigate("/"));
 
@@ -250,28 +378,60 @@ export default function AvatarCreator() {
               <ToolButton label="Upload photo" onClick={choose} disabled={busy}>
                 <UploadIcon />
               </ToolButton>
-              <ToolButton label={`Enhance (${SOON.toLowerCase()})`} disabled>
+              <ToolMenu
+                label="Create with AI"
+                align="left"
+                disabled={busy || working}
+                items={[
+                  { label: "Generate image", icon: <WandIcon />, onSelect: () => setTool("generate") },
+                  {
+                    label: "Edit image",
+                    icon: <PencilIcon />,
+                    onSelect: () => setTool("aiedit"),
+                    disabled: !editable,
+                    title: editable ? undefined : toolHint,
+                  },
+                ]}
+              >
                 <WandIcon />
-              </ToolButton>
-              <ToolButton label={`Crop (${SOON.toLowerCase()})`} disabled>
+              </ToolMenu>
+              <ToolButton
+                label={editable ? "Crop" : toolHint}
+                onClick={() => setTool("crop")}
+                disabled={busy || working || !editable}
+              >
                 <CropIcon />
               </ToolButton>
-              <ToolButton label={`More (${SOON.toLowerCase()})`} disabled>
+              <ToolMenu
+                label="More"
+                disabled={busy || working || !selected}
+                items={[
+                  { label: "Adjust colour and brightness", onSelect: () => setTool("enhance"), hidden: !editable },
+                  { label: "Rotate left", onSelect: () => transform({ rotate: -90 }), hidden: !editable },
+                  { label: "Rotate right", onSelect: () => transform({ rotate: 90 }), hidden: !editable },
+                  { label: "Flip horizontally", onSelect: () => transform({ flip: true }), hidden: !editable },
+                  { label: "Download picture", onSelect: download, hidden: !editable },
+                  { separator: true, hidden: !editable },
+                  { label: "Reset edits", onSelect: resetEdits, hidden: !selected?.original },
+                  { label: "Remove photo", onSelect: removePhoto, danger: true, hidden: selected?.kind !== "upload" },
+                  { label: "Nothing to change on a vendor's avatar", onSelect: () => {}, disabled: true, hidden: editable },
+                ]}
+              >
                 <MoreIcon />
-              </ToolButton>
+              </ToolMenu>
             </div>
             <button
               type="button"
-              disabled
-              title={SOON}
-              className="flex h-10 items-center gap-2 rounded-sm border border-border-strong bg-surface px-4 text-ui font-medium disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!selected || busy}
+              onClick={() => setTool("preview")}
+              className="flex h-10 items-center gap-2 rounded-sm border border-border-strong bg-surface px-4 text-ui font-medium transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-surface"
             >
               <PlayIcon />
               Preview
             </button>
           </div>
 
-          {fileError && <p className="mt-2 text-ui text-red">{fileError}</p>}
+          {(fileError || toolError) && <p className="mt-2 text-ui text-red">{fileError || toolError}</p>}
         </div>
 
         <input
@@ -284,6 +444,53 @@ export default function AvatarCreator() {
             // Cleared so choosing the same file again still fires a change.
             e.target.value = "";
           }}
+        />
+
+        {editable && (
+          <>
+            <CropDialog
+              open={tool === "crop"}
+              src={selected.url}
+              {...editInfo}
+              onApply={applyEdit}
+              onClose={() => setTool(null)}
+            />
+            <EnhanceDialog
+              open={tool === "enhance"}
+              src={selected.url}
+              {...editInfo}
+              onApply={applyEdit}
+              onClose={() => setTool(null)}
+            />
+          </>
+        )}
+        <GenerateDialog
+          open={tool === "generate"}
+          unavailable={generateUnavailable}
+          onUse={(file) => {
+            // A generated picture is added like any uploaded photo, and becomes the face.
+            add(file);
+            setTool(null);
+          }}
+          onClose={() => setTool(null)}
+        />
+        <EditImageDialog
+          open={tool === "aiedit"}
+          unavailable={editUnavailable}
+          getFile={currentFile}
+          onApply={applyEdit}
+          onClose={() => setTool(null)}
+        />
+        <PreviewDialog
+          open={tool === "preview"}
+          item={selected}
+          start={previewStart}
+          onKept={(avatar) => {
+            // The preview's draft is now the avatar: open it, nothing is created twice.
+            queryClient.invalidateQueries({ queryKey: ["avatars"] });
+            navigate(`/avatars/${avatar._id}`);
+          }}
+          onClose={() => setTool(null)}
         />
       </main>
 
@@ -552,6 +759,14 @@ function WandIcon() {
   return (
     <svg {...stroke}>
       <path d="M2.5 13.5l8-8M9 4l1.5 1.5M12 2v2M13 3h-2M13.5 7.5v1.5M14.25 8.25h-1.5M6.5 1.5v1.5M7.25 2.25h-1.5" />
+    </svg>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg {...stroke}>
+      <path d="M10.5 2.5l3 3-8 8H2.5v-3z" />
     </svg>
   );
 }

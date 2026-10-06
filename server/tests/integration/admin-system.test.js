@@ -292,7 +292,7 @@ describe("API keys", () => {
     const { status, body } = await admin.get("/api/admin/api-configs");
 
     assert.equal(status, 200);
-    assert.deepEqual(body.configs.map((c) => c.serviceName), ["lemonslice", "anthropic", "elevenlabs"]);
+    assert.deepEqual(body.configs.map((c) => c.serviceName), ["lemonslice", "anthropic", "elevenlabs", "kie_ai"]);
     const lemon = body.configs[0];
     assert.equal(lemon.required, true);
     assert.equal(lemon.envVar, "LEMONSLICE_API_KEY");

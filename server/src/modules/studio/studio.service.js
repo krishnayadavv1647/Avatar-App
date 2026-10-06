@@ -22,6 +22,7 @@ import { usageService } from "../billing/usage.service.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
 import { DEFAULT_PROMPT } from "../../ai/prompts/personality.js";
+import { imageGenService } from "./imagegen.service.js";
 import {
   ASPECT_RATIOS,
   LANGUAGES,
@@ -102,7 +103,7 @@ function photoVendorAvailable() {
  * on Unsplash's CDN, so nothing is stored. Only ids from the Library list are
  * accepted, never a URL from the request.
  */
-async function createFromLibraryFace({ workspace, faceId, name, gender, behaviour, userId }) {
+async function createFromLibraryFace({ workspace, faceId, name, gender, behaviour, userId, draft = false }) {
   const face = findFace(faceId);
   if (!face) throw unprocessable(`"${faceId}" is not one of the Library faces`);
 
@@ -124,10 +125,12 @@ async function createFromLibraryFace({ workspace, faceId, name, gender, behaviou
     previewUrl: created.previewUrl || face.url,
     personaId: persona._id,
     createdBy: userId,
+    draft,
   });
 
   logger.info({ avatarId: avatar.id, provider: provider.id, face: face.id }, "avatar created from library face");
-  previewService.requestInBackground(avatar._id);
+  // A draft's clip is requested by the preview flow, which needs to know if it started.
+  if (!draft) previewService.requestInBackground(avatar._id);
   return { ...avatar.toObject(), capabilities: CAPABILITIES[provider.id] };
 }
 
@@ -137,7 +140,7 @@ const stockKey = (providerId, providerAvatarId) =>
   `${providerId}:${providerAvatarId}`.replace(/\./g, "_");
 
 export const studioService = {
-  async createFromPhoto({ workspace, file, name, providerId, gender, behaviour, userId }) {
+  async createFromPhoto({ workspace, file, name, providerId, gender, behaviour, userId, draft = false }) {
     assertUsableImage(file);
     await usageService.assertCanCreateAvatar(workspace);
 
@@ -188,14 +191,16 @@ export const studioService = {
       previewUrl: created.previewUrl || stored.publicUrl,
       personaId: persona._id,
       createdBy: userId,
+      draft,
     });
 
     logger.info(
       { avatarId: avatar.id, provider: provider.id, storage: storage.id },
       "avatar created from photo",
     );
-    // The hover clip is made in the background; the create does not wait.
-    previewService.requestInBackground(avatar._id);
+    // The hover clip is made in the background; the create does not wait. (A draft's
+    // clip is requested by the preview flow, which needs to know if it started.)
+    if (!draft) previewService.requestInBackground(avatar._id);
 
     return { ...avatar.toObject(), capabilities: CAPABILITIES[provider.id] };
   },
@@ -341,10 +346,10 @@ export const studioService = {
    * it. Deleting it later must therefore not delete anything on their side -
    * it is not ours to remove.
    */
-  async createFromStock({ workspace, providerId, providerAvatarId, name, gender, behaviour, userId }) {
+  async createFromStock({ workspace, providerId, providerAvatarId, name, gender, behaviour, userId, draft = false }) {
     await usageService.assertCanCreateAvatar(workspace);
     if (providerId === FACE_LIBRARY) {
-      return createFromLibraryFace({ workspace, faceId: providerAvatarId, name, gender, behaviour, userId });
+      return createFromLibraryFace({ workspace, faceId: providerAvatarId, name, gender, behaviour, userId, draft });
     }
     if (!hasStockAvatars(providerId)) {
       throw unprocessable(`Provider "${providerId}" has no ready-made avatars`);
@@ -500,6 +505,8 @@ export const studioService = {
 
     return {
       storage: { driver: storage.id, reachableByVendors: storage.reachableByVendors },
+      // Whether "Generate image" / "Edit image" can work: `{ generate, edit }`.
+      imageGeneration: imageGenService.availability(),
       stubMode,
       providers: Object.entries(CAPABILITIES)
         .filter(([id, caps]) => caps.nodePlugin && (caps.photoAvatar || caps.videoClone))

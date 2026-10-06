@@ -150,7 +150,8 @@ export const usageService = {
     const { maxAvatars, planName } = await this.limitsFor(workspace);
     if (!maxAvatars) return;
 
-    const count = await Avatar.countDocuments({ workspaceId: workspace._id });
+    // A preview draft is not an avatar yet; it counts once it is kept.
+    const count = await Avatar.countDocuments({ workspaceId: workspace._id, draft: { $ne: true } });
     if (count >= maxAvatars) {
       const err = new Error(
         `Your ${planName || "current"} plan allows ${maxAvatars} avatar${maxAvatars === 1 ? "" : "s"}. ` +

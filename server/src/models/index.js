@@ -28,3 +28,4 @@ export { EmailList } from "./EmailList.js";
 export { EmailListMember } from "./EmailListMember.js";
 export { ScheduledEmail } from "./ScheduledEmail.js";
 export { SupportEmail } from "./SupportEmail.js";
+export { ImageTask } from "./ImageTask.js";

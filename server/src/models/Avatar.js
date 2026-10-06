@@ -45,6 +45,10 @@ const avatarSchema = new mongoose.Schema(
     voiceId: { type: mongoose.Schema.Types.ObjectId, ref: "Voice" },
 
     failureReason: String,
+
+    // Made only so the creator's Preview could record a talking clip. Hidden from
+    // every list until the person keeps it, and swept away if they never do.
+    draft: { type: Boolean, default: false, index: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 
     // A public link anyone can use to talk to this avatar without an account -

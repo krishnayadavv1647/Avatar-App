@@ -14,6 +14,7 @@ import {
 import { agentIdOf } from "../avatar/providers/lemonslice.provider.js";
 import { getRenderer } from "./renderers/registry.js";
 import { buildPipelineConfig } from "./pipeline.js";
+import { clipSizeFor } from "./clipSize.js";
 
 /**
  * Records an avatar's hover clip: the face saying one line, a few seconds
@@ -23,9 +24,15 @@ import { buildPipelineConfig } from "./pipeline.js";
  *
  *   1. start the face and the speech stack, exactly as a call does
  *   2. wait for the avatar's video track to appear
- *   3. record that track to R2 with LiveKit Egress
- *   4. say the line, let the lips finish, stop the recording
+ *   3. start the avatar talking, then record that track to R2 with LiveKit Egress
+ *   4. let it finish, let the lips close, stop the recording
  *   5. put the clip's public URL on the avatar and close the room
+ *
+ * Talking starts BEFORE the recorder does. The recorder takes a few seconds to
+ * come up, and a clip that began when it did - then waited for speech to be
+ * synthesised and the lips to catch up - opened on several seconds of a face
+ * just looking at the camera. The clip is muted and loops, so beginning
+ * partway through a sentence is invisible; beginning in silence is not.
  *
  * Any failure just ends the room; the avatar keeps its still picture.
  */
@@ -49,22 +56,14 @@ async function until(check, { timeoutMs, everyMs = 250, what }) {
   }
 }
 
-/** The first video track some other participant (the avatar) publishes. */
-function avatarVideoTrackId(room) {
+/** The first video track some other participant (the avatar) publishes, with its size once known. */
+function avatarVideoTrack(room) {
   for (const participant of room.remoteParticipants.values()) {
     for (const pub of participant.trackPublications.values()) {
-      if (pub.kind === TrackKind.KIND_VIDEO && pub.sid) return pub.sid;
+      if (pub.kind === TrackKind.KIND_VIDEO && pub.sid) return { sid: pub.sid, width: pub.width, height: pub.height };
     }
   }
   return null;
-}
-
-/** Clip size in the avatar's own aspect ratio, small enough for a card. */
-function clipSize(avatar) {
-  const ratio = avatar.render?.aspectRatio || "2x3";
-  if (ratio === "1x1") return { width: 540, height: 540 };
-  if (ratio === "9x16") return { width: 432, height: 768 };
-  return { width: 480, height: 720 };
 }
 
 export async function runPreview(ctx) {
@@ -91,24 +90,59 @@ export async function runPreview(ctx) {
       room: ctx.room,
     });
 
-    const videoTrackId = await until(() => avatarVideoTrackId(ctx.room), {
+    const track = await until(() => avatarVideoTrack(ctx.room), {
       timeoutMs: 45_000,
       what: "the avatar's video",
     });
 
+    // The track's real size, so the recording has the same shape and no black bars.
+    // Not known the instant the track appears; if it never is, the nominal shape is used.
+    const sized = await until(
+      () => {
+        const t = avatarVideoTrack(ctx.room);
+        return t?.width > 0 && t?.height > 0 ? t : null;
+      },
+      { timeoutMs: 5_000, everyMs: 200, what: "the avatar's video size" },
+    ).catch(() => track);
+    const size = clipSizeFor({
+      trackWidth: sized.width,
+      trackHeight: sized.height,
+      aspectRatio: avatar.render?.aspectRatio,
+    });
+    logger.info({ avatarId, track: { width: sized.width, height: sized.height }, size }, "recording preview clip");
+
+    // Talk first, record second: by the time the recorder is up the face is
+    // already mid-sentence. Two lines are queued so there is speech to record
+    // however long the recorder takes to start.
+    const firstName = avatar.name.split(" ")[0];
+    const lines = [
+      session.say(`Hi, I'm ${firstName}. It's really nice to meet you!`, { allowInterruptions: false }),
+      session.say("I'm here whenever you'd like to talk, so ask me anything.", { allowInterruptions: false }),
+    ];
+    let talking = true;
+    // A line that cannot be played must not fail the clip: it is recorded either way.
+    const talked = Promise.all(lines.map((line) => line.waitForPlayout()))
+      .catch(() => {})
+      .finally(() => {
+        talking = false;
+      });
+
     const key = `${doc.workspaceId}/previews/${avatarId}-${Date.now()}.mp4`;
-    const started = await recordTrackToR2({ roomName, videoTrackId, key, ...clipSize(avatar) });
+    const startedAt = Date.now();
+    const started = await recordTrackToR2({ roomName, videoTrackId: track.sid, key, ...size });
     egressId = started.egressId;
 
-    // Speaking before the recorder is running would cut the start of the line.
     await until(
       async () => (await recordingInfo(egressId))?.status === EgressStatus.EGRESS_ACTIVE,
-      { timeoutMs: 20_000, everyMs: 500, what: "the recording to start" },
+      { timeoutMs: 20_000, everyMs: 200, what: "the recording to start" },
     );
-    await sleep(700);
+    logger.info({ avatarId, recorderMs: Date.now() - startedAt, stillTalking: talking }, "preview recorder is up");
 
-    const firstName = avatar.name.split(" ")[0];
-    await session.say(`Hi, I'm ${firstName}. It's really nice to meet you!`).waitForPlayout();
+    // A very slow recorder can outlast both lines; then there is nothing to
+    // record, so say one more, now that it is running.
+    if (!talking) await session.say("It's lovely to meet you!", { allowInterruptions: false }).waitForPlayout();
+    else await talked;
+
     // The face runs a moment behind the audio; let the lips close.
     await sleep(1500);
 

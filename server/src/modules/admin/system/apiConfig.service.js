@@ -93,6 +93,21 @@ export const API_PROVIDERS = [
     },
     probe: (base, key) => ({ url: `${base}/v1/models`, headers: { "xi-api-key": key } }),
   },
+  {
+    serviceName: "kie_ai",
+    displayName: "Kie.ai (image generation)",
+    description:
+      "Generates and edits pictures in the avatar creator (Generate image, Edit image). Without a key those two options say they are not set up.",
+    envVar: "KIE_API_KEY",
+    baseUrl: "https://api.kie.ai",
+    documentation: "https://docs.kie.ai",
+    get: () => env.kie.apiKey,
+    set: (value) => {
+      env.kie.apiKey = value;
+    },
+    // The remaining-credits call: authenticated, read-only, and free.
+    probe: (base, key) => ({ url: `${base}/api/v1/chat/credit`, headers: { Authorization: `Bearer ${key}` } }),
+  },
 ];
 
 const BY_NAME = new Map(API_PROVIDERS.map((p) => [p.serviceName, p]));
@@ -202,7 +217,10 @@ function present(def, row) {
 }
 
 /** Classifies a vendor's answer to the probe the way the admin needs it explained. */
-export function classifyProbe(status, body) {
+export function classifyProbe(httpStatus, body) {
+  // Kie.ai answers HTTP 200 and puts the real outcome in the body's `code`.
+  const inBody = typeof body?.code === "number" && body.code !== 200 ? body.code : null;
+  const status = httpStatus >= 200 && httpStatus < 300 && inBody ? inBody : httpStatus;
   if (status === 401 || status === 403) {
     return {
       outcome: "invalid",

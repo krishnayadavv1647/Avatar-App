@@ -14,7 +14,8 @@ const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const adminAvatarsService = {
   async list({ q, status, provider, page = 1 }) {
-    const filter = {};
+    // Preview drafts are scratch work, not avatars anyone has.
+    const filter = { draft: { $ne: true } };
     if (status) filter.status = status;
     if (provider) filter.providerId = provider;
 

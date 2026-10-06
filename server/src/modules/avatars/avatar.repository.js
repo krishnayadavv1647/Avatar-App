@@ -6,7 +6,7 @@ import { Avatar } from "../../models/index.js";
  */
 export const avatarRepository = {
   listByWorkspace: (workspaceId) =>
-    Avatar.find({ workspaceId }).sort({ createdAt: -1 }).populate("personaId voiceId").lean(),
+    Avatar.find({ workspaceId, draft: { $ne: true } }).sort({ createdAt: -1 }).populate("personaId voiceId").lean(),
 
   findById: (workspaceId, id) =>
     Avatar.findOne({ _id: id, workspaceId }).populate("personaId voiceId").lean(),

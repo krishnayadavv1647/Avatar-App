@@ -5,6 +5,7 @@ import { env, isProd } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { getStorage } from "./integrations/storage/registry.js";
 import { startScheduledEmailLoop } from "./modules/comms/scheduler.js";
+import { startDraftSweep } from "./modules/studio/previewDraft.service.js";
 import { applyApiConfigs } from "./modules/admin/system/apiConfig.service.js";
 
 // A promise nobody awaited should not take the whole API down with it - and
@@ -57,6 +58,7 @@ async function main() {
     logger.info({ port: env.port, provider: env.avatarProvider }, "api listening");
     startKeepAlive();
     startScheduledEmailLoop();
+    startDraftSweep();
   });
 
   // Let in-flight requests finish rather than cutting live connections.
