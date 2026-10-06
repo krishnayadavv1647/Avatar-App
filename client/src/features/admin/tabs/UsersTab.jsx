@@ -12,6 +12,8 @@ import Icon from "../icons";
 import { date } from "../format";
 import CreateUserDialog from "../users/CreateUserDialog";
 import EditUserDialog from "../users/EditUserDialog";
+import ActAsUserDialog from "../users/ActAsUserDialog";
+import { useActAsUser } from "../impersonation";
 import { INPUT_CLASS, RowMenu, SOURCE_LABEL, SourceIcon, allowance } from "../users/userUi";
 
 /**
@@ -25,6 +27,7 @@ import { INPUT_CLASS, RowMenu, SOURCE_LABEL, SourceIcon, allowance } from "../us
 export default function UsersTab() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const act = useActAsUser();
 
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
@@ -165,6 +168,7 @@ export default function UsersTab() {
                   user={user}
                   onEdit={() => setEditing(user)}
                   onDetails={() => navigate(`/admin/users/${user.id}`)}
+                  onActAs={() => act.ask(user)}
                   onDelete={() => setDeleting(user)}
                 />
               ))}
@@ -219,6 +223,8 @@ export default function UsersTab() {
         />
       )}
 
+      <ActAsUserDialog act={act} />
+
       <ConfirmDialog
         open={Boolean(deleting)}
         title={`Delete ${deleting?.email ?? "user"}?`}
@@ -239,7 +245,7 @@ export default function UsersTab() {
 }
 
 /** One account: who they are, their badges, their minutes, and a menu. */
-function UserRow({ user, onEdit, onDetails, onDelete }) {
+function UserRow({ user, onEdit, onDetails, onActAs, onDelete }) {
   const minutes = allowance(user);
   const initial = (user.name?.[0] || user.email[0]).toUpperCase();
 
@@ -286,6 +292,12 @@ function UserRow({ user, onEdit, onDetails, onDelete }) {
           items={[
             { label: "Edit User", onSelect: onEdit },
             { label: "View details", onSelect: onDetails },
+            {
+              label: "Act as user",
+              onSelect: onActAs,
+              disabled: user.admin,
+              title: user.admin ? "Admins can't be impersonated." : "See the app as this user, and make changes for them.",
+            },
             { separator: true },
             {
               label: "Delete User",

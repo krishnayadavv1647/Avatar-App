@@ -170,7 +170,7 @@ export function verifyAccessToken(token) {
   return jwt.verify(token, env.jwt.accessSecret);
 }
 
-const publicUser = (user) => ({
+export const publicUser = (user) => ({
   id: String(user._id),
   email: user.email,
   name: user.name,

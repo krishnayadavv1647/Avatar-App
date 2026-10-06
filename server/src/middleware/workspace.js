@@ -24,7 +24,8 @@ export async function resolveWorkspace(req, res, next) {
       Workspace.findById(req.auth.workspaceId),
       User.exists({ _id: req.auth.userId, blockedAt: { $ne: null } }),
     ]);
-    if (blocked) throw accountBlocked();
+    // An admin acting as a blocked user is looking at exactly that account.
+    if (blocked && !req.auth.impersonatedBy) throw accountBlocked();
     req.workspace = workspace;
 
     if (!req.workspace) {

@@ -73,6 +73,13 @@ async function request(path, options = {}) {
     res = await send(path, options);
   }
 
+  // An admin acting as a user has no refresh token: when that token ends, so
+  // does the visit, and the admin lands back in their own session.
+  if (res.status === 401 && useAuth.getState().impersonating) {
+    useAuth.getState().stopImpersonation();
+    window.location.assign("/admin");
+  }
+
   const text = await res.text();
   let payload = null;
   let json = true;

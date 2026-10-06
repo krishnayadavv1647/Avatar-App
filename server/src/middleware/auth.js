@@ -19,6 +19,8 @@ export function authenticate(req, res, next) {
       userId: claims.sub,
       workspaceId: claims.wsp || null,
       role: claims.role,
+      // Set only on a token an admin got by acting as this user.
+      impersonatedBy: claims.imp || null,
     };
   } catch {
     // An expired or malformed token is the same as none. The client refreshes

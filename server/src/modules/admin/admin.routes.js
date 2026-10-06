@@ -37,6 +37,7 @@ router.get("/users/export.csv", validate(adminValidation.exportUsers), adminCont
 router.get("/users/:id", validate(adminValidation.byId), adminController.getUser);
 router.patch("/users/:id", validate(adminValidation.updateUser), adminController.updateUser);
 router.delete("/users/:id", validate(adminValidation.byId), adminController.removeUser);
+router.post("/users/:id/impersonate", validate(adminValidation.byId), adminController.impersonate);
 router.post("/users/:id/block", validate(adminValidation.block), adminController.block);
 router.delete("/users/:id/block", validate(adminValidation.byId), adminController.unblock);
 router.put("/users/:id/plan", validate(adminValidation.assignPlan), adminController.assignPlan);

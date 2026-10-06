@@ -23,6 +23,8 @@ export const adminUsersApi = {
   /** `{ user, planEmail: "sent" | "failed" | "skipped" }` */
   update: (id, fields) => api.patch(`/admin/users/${id}`, fields),
   remove: (id) => api.del(`/admin/users/${id}`),
+  /** `{ accessToken, user, expiresAt, blocked }` - an hour of acting as that user. */
+  impersonate: (id) => api.post(`/admin/users/${id}/impersonate`),
 
   /**
    * The filtered users as a CSV, every page. Fetched with the sign-in token

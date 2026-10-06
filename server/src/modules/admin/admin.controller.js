@@ -1,5 +1,6 @@
 import { adminService } from "./admin.service.js";
 import { usersService } from "./users.service.js";
+import { impersonationService } from "./impersonation.service.js";
 import { plansService } from "./plans.service.js";
 import { invitationService } from "../invitations/invitation.service.js";
 import { asyncHandler } from "../../middleware/validate.js";
@@ -14,6 +15,11 @@ export const adminController = {
   access: asyncHandler(async (req, res) => {
     const user = await User.findById(req.auth.userId).select("email platformAdmin").lean();
     res.json({ admin: isPlatformAdmin(user) });
+  }),
+
+  /** Signs the admin in as that user for an hour; see impersonation.service.js. */
+  impersonate: asyncHandler(async (req, res) => {
+    res.json(await impersonationService.start(req.params.id, actor(req)));
   }),
 
   stats: asyncHandler(async (req, res) => {

@@ -25,6 +25,8 @@ import invitationRoutes from "./modules/invitations/invitation.routes.js";
 import inboundMailRoutes from "./modules/comms/webhook.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
 import { authenticate, requireAuth } from "./middleware/auth.js";
+import { impersonationGuard } from "./middleware/impersonation.js";
+import impersonationRoutes from "./modules/impersonation/impersonation.routes.js";
 import { getStorage } from "./integrations/storage/registry.js";
 
 /**
@@ -77,6 +79,8 @@ export function createApp() {
 
   // Runs on every request but rejects nothing; routes opt into requireAuth.
   app.use(authenticate);
+  // An admin acting as a user: refused actions and the audit trail.
+  app.use(impersonationGuard);
 
   const storage = getStorage();
 
@@ -120,6 +124,7 @@ export function createApp() {
   // Called by the mail provider, not a user.
   app.use("/api/inbound", inboundMailRoutes);
   app.use("/api/oauth", oauthRoutes);
+  app.use("/api/impersonation", requireAuth, impersonationRoutes);
   app.use("/api/api-keys", requireAuth, apiKeyRoutes);
   // The app as an MCP server. It authenticates with its own API key, not a session.
   app.use("/api/mcp", mcpRoutes);

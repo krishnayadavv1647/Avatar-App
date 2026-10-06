@@ -1,4 +1,5 @@
 import { Avatar, Conversation, User, Workspace } from "../../../models/index.js";
+import { isPlatformAdmin } from "../../../middleware/admin.js";
 
 /**
  * Every avatar on the platform, with who owns it - the admin's global view of
@@ -46,7 +47,7 @@ export const adminAvatarsService = {
       ]),
     ]);
     const owners = await User.find({ _id: { $in: workspaces.map((w) => w.ownerId).filter(Boolean) } })
-      .select("name email blockedAt")
+      .select("name email blockedAt platformAdmin")
       .lean();
 
     const ownerOfWorkspace = new Map(
@@ -74,7 +75,13 @@ export const adminAvatarsService = {
           calls: used?.calls || 0,
           minutes: Math.round(((used?.seconds || 0) / 60) * 10) / 10,
           owner: owner
-            ? { _id: owner._id, name: owner.name, email: owner.email, blocked: Boolean(owner.blockedAt) }
+            ? {
+                _id: owner._id,
+                name: owner.name,
+                email: owner.email,
+                blocked: Boolean(owner.blockedAt),
+                admin: isPlatformAdmin(owner),
+              }
             : null,
         };
       }),

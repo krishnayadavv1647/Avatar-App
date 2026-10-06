@@ -6,6 +6,8 @@ import MediaPreview from "@/components/media/MediaPreview";
 import Button from "@/components/common/Button";
 import { Badge, Select } from "@/components/forms/controls";
 import { timeAgo } from "@/utils/timeAgo";
+import ActAsUserDialog from "../users/ActAsUserDialog";
+import { useActAsUser } from "../impersonation";
 
 /**
  * Every avatar on the platform, newest first, with who owns it - the admin's
@@ -22,6 +24,7 @@ export default function AvatarsTab() {
   const [status, setStatus] = useState("");
   const [provider, setProvider] = useState("");
   const [page, setPage] = useState(1);
+  const act = useActAsUser();
 
   // Wait for a pause in typing before asking the server, and start from page 1.
   useEffect(() => {
@@ -99,9 +102,11 @@ export default function AvatarsTab() {
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         {avatars.map((avatar) => (
-          <AdminAvatarCard key={avatar._id} avatar={avatar} />
+          <AdminAvatarCard key={avatar._id} avatar={avatar} onActAs={act.ask} />
         ))}
       </div>
+
+      <ActAsUserDialog act={act} />
 
       {data && data.pages > 1 && (
         <div className="flex items-center justify-between gap-3 pt-2">
@@ -121,7 +126,7 @@ export default function AvatarsTab() {
 }
 
 /** The Avatars page's card, with the owner and numbers where the call buttons would be. */
-function AdminAvatarCard({ avatar }) {
+function AdminAvatarCard({ avatar, onActAs }) {
   const video = useRef(null);
 
   return (
@@ -179,6 +184,15 @@ function AdminAvatarCard({ avatar }) {
           <p className="mt-1 text-ui text-white/60">No owner</p>
         )}
         {avatar.owner?.name && <p className="truncate text-label text-white/60">{avatar.owner.email}</p>}
+        {avatar.owner && !avatar.owner.admin && (
+          <button
+            type="button"
+            onClick={() => onActAs({ id: avatar.owner._id, name: avatar.owner.name, email: avatar.owner.email })}
+            className="mt-2 rounded-sm border border-white/30 px-2.5 py-1 text-label font-medium text-white transition-colors hover:bg-white/15"
+          >
+            Act as {avatar.owner.name || "owner"}
+          </button>
+        )}
         {avatar.failureReason && <Badge tone="red" className="mt-1">{avatar.failureReason}</Badge>}
       </div>
     </div>

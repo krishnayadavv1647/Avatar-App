@@ -12,6 +12,8 @@ import AdminGate from "./AdminGate";
 import { Stat, Th } from "./parts";
 import { compact, date, dateTime, duration, money } from "./format";
 import { SOURCE_LABEL } from "./users/userUi";
+import ActAsUserDialog from "./users/ActAsUserDialog";
+import { useActAsUser } from "./impersonation";
 
 /**
  * One user, as an admin sees them: their account, their plan, their
@@ -37,6 +39,7 @@ const STATUS_TONE = {
 
 function Detail() {
   const { id } = useParams();
+  const act = useActAsUser();
   const { data, error, isLoading } = useQuery({
     queryKey: ["admin-user", id],
     queryFn: () => adminApi.user(id),
@@ -68,8 +71,19 @@ function Detail() {
             {user.organization && ` · ${user.organization}`} · {SOURCE_LABEL[user.source] || "Sign-up"}
           </p>
         </div>
-        <BlockControl user={user} />
+        <div className="flex flex-wrap items-start justify-end gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => act.ask(user)}
+            disabled={user.admin}
+            title={user.admin ? "Admins can't be impersonated." : "See the app as this user, and make changes for them."}
+          >
+            Act as user
+          </Button>
+          <BlockControl user={user} />
+        </div>
       </header>
+      <ActAsUserDialog act={act} />
 
       {user.blocked && (
         <p className="mb-4 rounded border border-red-line bg-red-dim px-4 py-3 text-ui text-red">
