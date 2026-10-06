@@ -6,6 +6,7 @@ import MediaPreview from "@/components/media/MediaPreview";
 import Button from "@/components/common/Button";
 import Field from "@/components/forms/Field";
 import CallSurface from "@/features/call/CallSurface";
+import { linkFace } from "@/features/call/CallOrb";
 
 /**
  * The page a share link opens. For someone with no account: say who you are,
@@ -132,6 +133,7 @@ export default function TalkPage({ embedded = false }) {
         <CallSurface
           connection={call}
           avatar={avatar}
+          face={linkFace(token, avatar)}
           onEnd={end}
           ending={ending}
           onError={setStartError}

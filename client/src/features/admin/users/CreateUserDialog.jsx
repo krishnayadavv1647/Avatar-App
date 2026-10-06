@@ -17,7 +17,7 @@ const EMPTY = {
   password: "",
   role: "user",
   status: "active",
-  bonusMinutes: "0",
+  startingCredits: "0",
   organization: "",
   planId: "",
 };
@@ -25,7 +25,7 @@ const EMPTY = {
 /**
  * "Create New User": a real account made by an admin - it can sign in with the
  * password set here, gets its own workspace like any sign-up, and is marked as
- * created manually. Bonus minutes sit on top of the plan.
+ * created manually. Starting credits sit on top of the plan's.
  */
 export default function CreateUserDialog({ open, plans, onClose, onCreated }) {
   const [form, setForm] = useState(EMPTY);
@@ -39,7 +39,7 @@ export default function CreateUserDialog({ open, plans, onClose, onCreated }) {
         password: form.password,
         role: form.role,
         status: form.status,
-        bonusMinutes: Number(form.bonusMinutes) || 0,
+        ...(Number(form.startingCredits) > 0 && { startingCredits: Number(form.startingCredits) }),
         ...(form.organization.trim() && { organization: form.organization.trim() }),
         ...(form.planId && { planId: form.planId }),
       }),
@@ -140,13 +140,14 @@ export default function CreateUserDialog({ open, plans, onClose, onCreated }) {
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
           <div>
             <Field
-              label="Bonus minutes"
+              label="Starting credits"
               type="number"
               min="0"
-              value={form.bonusMinutes}
-              onChange={(bonusMinutes) => set({ bonusMinutes })}
-              hint="Extra minutes on top of the plan"
-              id="create-bonus"
+              step="1"
+              value={form.startingCredits}
+              onChange={(startingCredits) => set({ startingCredits })}
+              hint="Optional. Added to their balance on top of the plan's credits."
+              id="create-credits"
             />
           </div>
           <div>

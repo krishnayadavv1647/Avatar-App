@@ -3,6 +3,7 @@ import { Avatar, Conversation, User, Workspace } from "../../models/index.js";
 import { env } from "../../config/env.js";
 import { roomService } from "../rooms/room.service.js";
 import { isCallable } from "../avatars/avatar.service.js";
+import { fetchPicture } from "../avatars/previewImage.service.js";
 
 /**
  * Public share links: talking to an avatar with nothing but its link.
@@ -56,6 +57,11 @@ export const linkService = {
       avatar: { name: avatar.name, previewUrl: avatar.previewUrl },
       available: isCallable(avatar) && !(await ownerBlocked(avatar)),
     };
+  },
+
+  /** The avatar's still picture, same-origin, for the call page's connecting animation. */
+  async previewImage(token) {
+    return fetchPicture((await findAvatar(token)).previewUrl);
   },
 
   async startCall(token, { name, email }) {

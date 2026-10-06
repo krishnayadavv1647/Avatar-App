@@ -42,6 +42,10 @@ const conversationSchema = new mongoose.Schema(
     endedAt: Date,
     durationSec: { type: Number, default: 0 },
     costCents: { type: Number, default: 0 },
+    // Credits per minute this call was started at, fixed for its whole length so a
+    // rate change mid-call cannot reprice it; and what it ended up costing.
+    creditRate: Number,
+    credits: { type: Number, default: 0 },
     endReason: String,
   },
   { timestamps: true },

@@ -32,24 +32,29 @@ export function SourceIcon({ source, size = 12, className }) {
   );
 }
 
-/** "Starter ($29.00/mo - 100 min)": how a plan reads in a picker. */
+/** What a plan gives each month, in words: "1,000 credits / month", "Unlimited". */
+export const planCreditsLabel = (plan) =>
+  plan.unlimitedCredits ? "Unlimited" : `${(plan.monthlyCredits ?? 0).toLocaleString()} credits / month`;
+
+/** "Starter ($29.00/mo - 1,000 credits / month)": how a plan reads in a picker. */
 export function planLabel(plan) {
   const price = plan.priceCents ? `${money(plan.priceCents)}${plan.durationType === "lifetime" ? " one time" : "/mo"}` : "$0";
-  const minutes = plan.includedMinutes ? `${plan.includedMinutes.toLocaleString()} min` : "no minute cap";
-  return `${plan.name} (${price} - ${minutes})`;
+  return `${plan.name} (${price} - ${planCreditsLabel(plan)})`;
 }
 
-/** What a plan's minutes read as, where 0 means there is no monthly cap. */
-export const planMinutesLabel = (minutes) => (minutes > 0 ? `${minutes.toLocaleString()} min` : "No monthly cap");
+/** What a number of credits buys, e.g. "= 100 min on Standard, 166 on Flash, 250 on Lite". */
+export function creditsBuy(credits, rates) {
+  if (!rates || !(credits > 0)) return null;
+  const minutes = (rate) => Math.floor((credits / rate) * 10) / 10;
+  return `= ${minutes(rates.standard)} min on Standard, ${minutes(rates.flash)} on Flash, ${minutes(rates.lite)} on Lite`;
+}
 
-/** How a user's total allowance reads: plan plus bonus, or "No cap" when the plan has none. */
-export function allowance({ planMinutes, bonusMinutes }) {
-  if (!planMinutes) {
-    return { total: "No cap", detail: bonusMinutes > 0 ? `Bonus ${bonusMinutes} (plan has no cap)` : "Plan: no monthly cap" };
-  }
+/** How a user's credits read in a row: the balance, and what their plan gives each month. */
+export function allowance({ planCredits, unlimited, credits }) {
+  if (unlimited) return { total: "Unlimited", detail: "Plan: unlimited credits" };
   return {
-    total: `${(planMinutes + bonusMinutes).toLocaleString()} min`,
-    detail: `Plan: ${planMinutes.toLocaleString()}${bonusMinutes > 0 ? ` + Bonus: ${bonusMinutes.toLocaleString()}` : ""}`,
+    total: `${credits.toLocaleString()} credits`,
+    detail: planCredits > 0 ? `Plan: ${planCredits.toLocaleString()}/month` : "No plan credits",
   };
 }
 

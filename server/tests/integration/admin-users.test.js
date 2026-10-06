@@ -9,7 +9,6 @@ import test, { after, before, describe } from "node:test";
 import assert from "node:assert/strict";
 import { signUp, startTestApp } from "../helpers.js";
 import * as models from "../../src/models/index.js";
-import { usageService } from "../../src/modules/billing/usage.service.js";
 
 let app;
 let admin;
@@ -51,7 +50,7 @@ const auditActions = async (userId) =>
 
 describe("listing", () => {
   test("filters by status, plan and source, and counts the active", async () => {
-    const plan = await createPlan({ includedMinutes: 30 });
+    const plan = await createPlan({ monthlyCredits: 300 });
     const manual = (await createUser({ planId: plan._id, organization: "Acme" })).body.user;
     const suspended = (await createUser({ status: "suspended" })).body.user;
     const signedUp = await signUp(app.baseUrl);
@@ -80,16 +79,20 @@ describe("listing", () => {
     assert.equal(both.total, 0);
   });
 
-  test("each row carries what the screen shows: source, organization, workspace, minutes and bonus", async () => {
-    const plan = await createPlan({ includedMinutes: 45 });
-    const made = (await createUser({ planId: plan._id, organization: "Acme", bonusMinutes: 15 })).body.user;
+  test("each row carries what the screen shows: source, organization, workspace, plan credits and balance", async () => {
+    const plan = await createPlan({ monthlyCredits: 450 });
+    const made = (await createUser({ planId: plan._id, organization: "Acme", startingCredits: 150 })).body.user;
 
     const row = (await admin.get(`/api/admin/users?q=${encodeURIComponent(made.email)}`)).body.users[0];
     assert.equal(row.source, "manual");
     assert.equal(row.organization, "Acme");
     assert.equal(row.plan, plan.name);
-    assert.equal(row.planMinutes, 45);
-    assert.equal(row.bonusMinutes, 15);
+    assert.equal(row.planCredits, 450);
+    assert.equal(row.unlimited, false);
+    // 100 welcome credits from sign-up, the plan's 450 and the 150 the admin started them with.
+    assert.equal(row.credits, 700);
+    assert.equal(row.planMinutes, undefined);
+    assert.equal(row.bonusMinutes, undefined);
     assert.ok(row.workspace.name);
     assert.equal(row.role, "user");
   });
@@ -109,11 +112,11 @@ describe("listing", () => {
 });
 
 describe("creating", () => {
-  test("makes a real account: signs in, own workspace, source manual, plan and bonus applied", async () => {
-    const plan = await createPlan({ includedMinutes: 60 });
+  test("makes a real account: signs in, own workspace, source manual, plan and starting credits applied", async () => {
+    const plan = await createPlan({ monthlyCredits: 600 });
     const { status, body } = await createUser({
       planId: plan._id,
-      bonusMinutes: 20,
+      startingCredits: 200,
       organization: "Acme Inc",
       email: "Fresh.Person@Example.com",
     });
@@ -123,15 +126,19 @@ describe("creating", () => {
     assert.equal(body.user.source, "manual");
     assert.equal(body.user.organization, "Acme Inc");
     assert.equal(body.user.plan, plan.name);
-    assert.equal(body.user.bonusMinutes, 20);
+    assert.equal(body.user.credits, 100 + 600 + 200);
+    assert.equal(body.user.planCredits, 600);
     assert.equal(body.user.status, "active");
 
     const signedIn = await login("fresh.person@example.com");
     assert.equal(signedIn.status, 200);
 
     const detail = (await admin.get(`/api/admin/users/${body.user.id}`)).body;
-    assert.equal(detail.limits.includedMinutes, 60);
-    assert.equal(detail.limits.bonusMinutes, 20);
+    assert.equal(detail.credits.balance, 900);
+    assert.equal(detail.credits.plan.monthlyCredits, 600);
+    // The admin's gift is on the ledger, with the admin as its author.
+    const ledger = (await admin.get(`/api/admin/users/${body.user.id}/credits`)).body.transactions;
+    assert.ok(ledger.some((t) => t.kind === "admin_grant" && t.credits === 200));
     assert.ok(detail.workspace._id);
 
     assert.ok((await auditActions(body.user.id)).includes("admin.user.create"));
@@ -183,24 +190,24 @@ describe("creating", () => {
 });
 
 describe("editing", () => {
-  test("changes profile, bonus minutes and plan in one save, and audits it", async () => {
-    const before = await createPlan({ includedMinutes: 10 });
-    const after = await createPlan({ includedMinutes: 90 });
+  test("changes profile and plan in one save, and audits it", async () => {
+    const before = await createPlan({ monthlyCredits: 100 });
+    const after = await createPlan({ monthlyCredits: 900 });
     const user = (await createUser({ planId: before._id })).body.user;
 
     const { status, body } = await admin.patch(`/api/admin/users/${user.id}`, {
       name: "New Name",
       organization: "New Org",
-      bonusMinutes: 25,
       planId: after._id,
     });
 
     assert.equal(status, 200);
     assert.equal(body.user.name, "New Name");
     assert.equal(body.user.organization, "New Org");
-    assert.equal(body.user.bonusMinutes, 25);
     assert.equal(body.user.plan, after.name);
-    assert.equal(body.user.planMinutes, 90);
+    assert.equal(body.user.planCredits, 900);
+    // The new plan's credits are on the account straight away (welcome 100 + 100, then the 800 more).
+    assert.equal(body.user.credits, 1000);
     // Mail is not set up in tests, and that is not an error.
     assert.equal(body.planEmail, "skipped");
 
@@ -242,7 +249,8 @@ describe("editing", () => {
   test("the email cannot be edited, and bad input is refused", async () => {
     const user = (await createUser()).body.user;
     assert.equal((await admin.patch(`/api/admin/users/${user.id}`, { email: "new@example.com" })).status, 400);
-    assert.equal((await admin.patch(`/api/admin/users/${user.id}`, { bonusMinutes: -1 })).status, 400);
+    assert.equal((await admin.patch(`/api/admin/users/${user.id}`, { bonusMinutes: 5 })).status, 400, "bonus minutes no longer exist");
+    assert.equal((await admin.patch(`/api/admin/users/${user.id}`, { credits: 5 })).status, 400, "credits change through their own endpoint");
     assert.equal((await admin.patch(`/api/admin/users/${user.id}`, { status: "pending" })).status, 400);
     assert.equal((await admin.patch("/api/admin/users/000000000000000000000000", { name: "Ghost" })).status, 404);
   });
@@ -425,8 +433,8 @@ describe("CSV export", () => {
     fetch(`${app.baseUrl}/api/admin/users/export.csv${query}`, { headers: { authorization: `Bearer ${client.token}` } });
 
   test("exports every page with the same filters as the list", async () => {
-    const plan = await createPlan({ includedMinutes: 50 });
-    const a = (await createUser({ planId: plan._id, name: "Exported, \"Quoted\" Person", bonusMinutes: 5 })).body.user;
+    const plan = await createPlan({ monthlyCredits: 500 });
+    const a = (await createUser({ planId: plan._id, name: "Exported, \"Quoted\" Person", startingCredits: 50 })).body.user;
     await createUser({ planId: plan._id });
 
     const res = await fetchCsv(admin, `?plan=${plan._id}`);
@@ -438,11 +446,11 @@ describe("CSV export", () => {
     const lines = text.split("\r\n");
     assert.equal(
       lines[0],
-      '"Name","Email","Plan","Status","Plan Minutes","Bonus Minutes","Source","Organization","Workspace","Created Date"',
+      '"Name","Email","Plan","Status","Plan Credits","Credits","Source","Organization","Workspace","Created Date"',
     );
     assert.equal(lines.length, 3, "header plus the two users on that plan");
     assert.ok(text.includes('"Exported, ""Quoted"" Person"'));
-    assert.ok(text.includes(`"${a.email}","${plan.name}","active","50","5","manual"`));
+    assert.ok(text.includes(`"${a.email}","${plan.name}","active","500","650","manual"`));
   });
 
   test("exports more than one page worth", async () => {
@@ -469,45 +477,62 @@ describe("CSV export", () => {
   });
 });
 
-describe("bonus minutes", () => {
-  const withMinutes = async ({ includedMinutes, bonusMinutes, used, overageEnabled = false }) => {
-    const plan = await createPlan({ includedMinutes, overageEnabled });
-    const user = (await createUser({ planId: plan._id, bonusMinutes })).body.user;
-    const workspace = await models.Workspace.findById((await models.User.findById(user.id).lean()).workspaceId);
-    if (used) {
-      await models.UsageLedger.create({ workspaceId: workspace._id, minutes: used, costCents: 0, kind: "adjustment" });
-    }
-    return workspace;
-  };
+describe("credits an admin gives", () => {
+  const credits = (user) => admin.get(`/api/admin/users/${user.id}/credits`).then((r) => r.body);
+  const adjust = (user, change, note = "For a test") =>
+    admin.post(`/api/admin/users/${user.id}/credits`, { credits: change, note });
 
-  test("are added to the plan's allowance", async () => {
-    const workspace = await withMinutes({ includedMinutes: 10, bonusMinutes: 5, used: 12 });
-    await usageService.assertCanStartCall(workspace);
+  test("raise the balance, and are kept when the plan changes", async () => {
+    const plan = await createPlan({ monthlyCredits: 200 });
+    const next = await createPlan({ monthlyCredits: 400 });
+    const user = (await createUser({ planId: plan._id })).body.user;
+    assert.equal((await credits(user)).balance, 300, "100 welcome + the plan's 200");
 
-    await models.UsageLedger.create({ workspaceId: workspace._id, minutes: 4, costCents: 0, kind: "adjustment" });
-    await assert.rejects(() => usageService.assertCanStartCall(workspace), /16\.0 of 15 minutes/);
-  });
-
-  test("without them the same usage is refused", async () => {
-    const workspace = await withMinutes({ includedMinutes: 10, bonusMinutes: 0, used: 12 });
-    await assert.rejects(() => usageService.assertCanStartCall(workspace), /Monthly allowance used/);
-  });
-
-  test("do not turn an uncapped plan into a capped one", async () => {
-    const workspace = await withMinutes({ includedMinutes: 0, bonusMinutes: 5, used: 500 });
-    await usageService.assertCanStartCall(workspace);
-  });
-
-  test("survive a plan change, and show in the limits", async () => {
-    const plan = await createPlan({ includedMinutes: 20 });
-    const next = await createPlan({ includedMinutes: 40 });
-    const user = (await createUser({ planId: plan._id, bonusMinutes: 7 })).body.user;
+    const added = await adjust(user, 50);
+    assert.equal(added.status, 200);
+    assert.equal(added.body.balance, 350);
 
     await admin.put(`/api/admin/users/${user.id}/plan`, { planId: next._id });
-    const detail = (await admin.get(`/api/admin/users/${user.id}`)).body;
-    assert.equal(detail.limits.includedMinutes, 40);
-    assert.equal(detail.limits.bonusMinutes, 7);
-    assert.equal(detail.limits.allowanceMinutes, 47);
-    assert.equal(detail.subscription.bonusMinutes, 7);
+    const after = await credits(user);
+    // The plan top-up (200 more this month) came on top; the gift was not undone.
+    assert.equal(after.balance, 550);
+    assert.ok(after.transactions.some((t) => t.kind === "admin_grant" && t.credits === 50));
+  });
+
+  test("can be taken back, but never below zero, and each change needs a reason", async () => {
+    const user = (await createUser()).body.user;
+
+    const taken = await adjust(user, -30);
+    assert.equal(taken.body.balance, 70);
+    assert.ok((await credits(user)).transactions.some((t) => t.kind === "admin_deduct" && t.credits === -30));
+
+    const tooMuch = await adjust(user, -100_000);
+    assert.equal(tooMuch.status, 422);
+    assert.equal((await credits(user)).balance, 70);
+
+    assert.equal((await adjust(user, 5, "")).status, 400);
+    assert.equal((await adjust(user, 0)).status, 400);
+    assert.equal((await adjust(user, 1.5)).status, 400);
+  });
+
+  test("are written to the audit log, and only admins can give them", async () => {
+    const user = (await createUser()).body.user;
+    await adjust(user, 25, "Goodwill after an outage");
+    const entry = await models.AuditLog.findOne({ action: "credits.grant", "target.id": user.id }).lean();
+    assert.equal(entry.meta.note, "Goodwill after an outage");
+
+    const other = await signUp(app.baseUrl);
+    assert.equal((await other.post(`/api/admin/users/${user.id}/credits`, { credits: 5, note: "Sneaky" })).status, 403);
+    assert.equal((await other.get(`/api/admin/users/${user.id}/credits`)).status, 403);
+  });
+
+  test("starting credits on create go through the ledger", async () => {
+    const user = (await createUser({ startingCredits: 75 })).body.user;
+    const account = await credits(user);
+    assert.equal(account.balance, 175);
+    assert.ok(account.transactions.some((t) => t.kind === "admin_grant" && t.credits === 75));
+
+    assert.equal((await createUser({ startingCredits: -5 })).status, 400);
+    assert.equal((await createUser({ bonusMinutes: 5 })).status, 400);
   });
 });

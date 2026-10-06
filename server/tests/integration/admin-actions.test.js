@@ -120,7 +120,7 @@ describe("blocking", () => {
 
 describe("plans", () => {
   test("are created, listed with how many are on them, and edited", async () => {
-    const created = await createPlan({ name: "Starter", priceCents: 900, includedMinutes: 60 });
+    const created = await createPlan({ name: "Starter", priceCents: 900, monthlyCredits: 600 });
     assert.equal(created.status, 201);
     assert.equal(created.body.plan.users, 0);
 
@@ -216,20 +216,62 @@ describe("plan limits", () => {
     assert.match(second.body.error.message, /allows 1 avatar/);
   });
 
-  test("used-up minutes stop the next call, unless overage is on", async () => {
+  /** Sets a user's credit balance to exactly `target`, through the admin's own credit endpoint. */
+  const setBalance = async (user, target) => {
+    const { body } = await admin.get(`/api/admin/users/${user.user.id}/credits`);
+    const change = target - body.balance;
+    if (change) {
+      const res = await admin.post(`/api/admin/users/${user.user.id}/credits`, { credits: change, note: "Set up for a test" });
+      assert.equal(res.status, 200);
+    }
+  };
+  const call = (user, avatar) => user.post("/api/rooms", { avatarId: avatar._id });
+
+  test("a call is refused below a minute's credits, and allowed once they are topped up", async () => {
     const user = await signUp(app.baseUrl);
-    const plan = await createPlan({ includedMinutes: 1, overageEnabled: false });
+    const plan = await createPlan({ monthlyCredits: 5 });
     await admin.put(`/api/admin/users/${user.user.id}/plan`, { planId: plan.body.plan._id });
+    const avatar = (await adopt(user, "Caller")).body.avatar;
 
-    const { UsageLedger, Workspace } = await import("../../src/models/index.js");
-    const { usageService } = await import("../../src/modules/billing/usage.service.js");
-    const workspace = await Workspace.findById(user.user.workspaceId);
-    await UsageLedger.create({ workspaceId: workspace._id, minutes: 2, costCents: 0, kind: "adjustment" });
+    // A Standard minute costs 10 credits.
+    await setBalance(user, 5);
+    const refused = await call(user, avatar);
+    assert.equal(refused.status, 402);
+    assert.equal(refused.body.error.code, "insufficient_credits");
 
-    await assert.rejects(() => usageService.assertCanStartCall(workspace), /Monthly allowance used/);
+    await setBalance(user, 10);
+    const started = await call(user, avatar);
+    assert.equal(started.status, 201);
+    await user.del(`/api/rooms/${started.body.conversationId}`);
+  });
 
-    // Editing the plan changes it for everyone on it, with no re-assigning.
-    await admin.patch(`/api/admin/plans/${plan.body.plan._id}`, { overageEnabled: true });
-    await usageService.assertCanStartCall(workspace);
+  test("editing a plan's credits reaches people already on it, with no re-assigning", async () => {
+    const user = await signUp(app.baseUrl);
+    const plan = await createPlan({ monthlyCredits: 5 });
+    await admin.put(`/api/admin/users/${user.user.id}/plan`, { planId: plan.body.plan._id });
+    const avatar = (await adopt(user, "Caller")).body.avatar;
+    await setBalance(user, 5);
+    assert.equal((await call(user, avatar)).status, 402);
+
+    // The plan now gives 50 a month; this month's top-up is the difference.
+    await admin.patch(`/api/admin/plans/${plan.body.plan._id}`, { monthlyCredits: 50 });
+    const { body } = await admin.get(`/api/admin/users/${user.user.id}/credits`);
+    assert.equal(body.balance, 50);
+
+    const started = await call(user, avatar);
+    assert.equal(started.status, 201);
+    await user.del(`/api/rooms/${started.body.conversationId}`);
+  });
+
+  test("an unlimited plan is never refused for credits", async () => {
+    const user = await signUp(app.baseUrl);
+    const plan = await createPlan({ unlimitedCredits: true });
+    await admin.put(`/api/admin/users/${user.user.id}/plan`, { planId: plan.body.plan._id });
+    const avatar = (await adopt(user, "Caller")).body.avatar;
+
+    await setBalance(user, 0);
+    const started = await call(user, avatar);
+    assert.equal(started.status, 201);
+    await user.del(`/api/rooms/${started.body.conversationId}`);
   });
 });

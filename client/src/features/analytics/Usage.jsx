@@ -1,7 +1,9 @@
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { analyticsApi } from "@/services/analytics.api";
 import PageHeader from "@/components/layout/PageHeader";
 import Card from "@/components/common/Card";
+import { formatCredits } from "@/features/credits/useCredits";
 
 const money = (cents) => `$${(cents / 100).toFixed(2)}`;
 
@@ -58,11 +60,14 @@ export default function Usage() {
         )}
       </Card>
 
-      {data.plan && (
+      {data.credits && (
         <p className="mt-5 text-ui text-text-faint">
-          Plan {data.plan.name}
-          {data.plan.includedMinutes > 0 && ` · ${data.plan.includedMinutes} min included`}
-          {` · overage ${data.plan.overageEnabled ? "on" : "off"}`}
+          {data.credits.plan && `Plan ${data.credits.plan.name} · `}
+          {data.credits.unlimited ? "unlimited credits" : `${formatCredits(data.credits.available)} credits left`}
+          {" · "}
+          <Link to="/credits" className="text-text-muted underline-offset-2 hover:text-text hover:underline">
+            Manage credits
+          </Link>
         </p>
       )}
 

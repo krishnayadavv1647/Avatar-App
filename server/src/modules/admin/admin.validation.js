@@ -23,17 +23,19 @@ const accountFields = {
   organization: z.string().trim().max(120),
   status: z.enum(["active", "suspended"]),
   role: z.enum(["user", "admin"]),
-  bonusMinutes: z.coerce.number().int().min(0).max(1_000_000),
   planId: objectId,
 };
 
-/** Everything about a plan but its key. Zero minutes or avatars means "no limit". */
+/**
+ * Everything about a plan but its key. Zero max avatars means "no limit"; zero
+ * monthly credits means the plan gives none (see unlimitedCredits for no limit).
+ */
 const planFields = {
   name: z.string().trim().min(1, "Name is required").max(60),
   description: z.string().trim().max(200).optional(),
   priceCents: z.coerce.number().int().min(0).max(10_000_000),
-  includedMinutes: z.coerce.number().int().min(0).max(1_000_000),
-  overageEnabled: z.boolean(),
+  monthlyCredits: z.coerce.number().int().min(0).max(10_000_000),
+  unlimitedCredits: z.boolean(),
   concurrencyLimit: z.coerce.number().int().min(1).max(100),
   maxAvatars: z.coerce.number().int().min(0).max(10_000),
   isDefault: z.boolean(),
@@ -61,8 +63,10 @@ export const adminValidation = {
         // The same rule as signing up, so an admin cannot make a weaker account.
         password: authValidation.register.body.shape.password,
         ...accountFields,
+        // Credits to start them with, on top of any the plan gives.
+        startingCredits: z.coerce.number().int().min(0).max(1_000_000),
       })
-      .partial({ organization: true, status: true, role: true, bonusMinutes: true, planId: true })
+      .partial({ organization: true, status: true, role: true, startingCredits: true, planId: true })
       .strict(),
   },
   updateUser: {
@@ -111,8 +115,8 @@ export const adminValidation = {
       .partial({
         description: true,
         priceCents: true,
-        includedMinutes: true,
-        overageEnabled: true,
+        monthlyCredits: true,
+        unlimitedCredits: true,
         concurrencyLimit: true,
         maxAvatars: true,
         isDefault: true,

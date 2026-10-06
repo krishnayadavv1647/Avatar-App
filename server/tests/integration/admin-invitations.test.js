@@ -18,7 +18,7 @@ let plan;
 before(async () => {
   app = await startTestApp();
   admin = await signUp(app.baseUrl, { email: "admin@example.com", name: "Admin" });
-  plan = (await admin.post("/api/admin/plans", { key: "invited", name: "Invited Plan", includedMinutes: 77 })).body.plan;
+  plan = (await admin.post("/api/admin/plans", { key: "invited", name: "Invited Plan", monthlyCredits: 770 })).body.plan;
 });
 
 after(() => app.stop());
@@ -131,7 +131,9 @@ describe("opening the link", () => {
     assert.equal(status, 200);
     assert.equal(page.invitation.email, to);
     assert.equal(page.invitation.plan.name, "Invited Plan");
-    assert.equal(page.invitation.plan.includedMinutes, 77);
+    assert.equal(page.invitation.plan.monthlyCredits, 770);
+    assert.equal(page.invitation.plan.unlimited, false);
+    assert.equal(page.invitation.plan.includedMinutes, undefined);
     assert.equal(page.invitation.status, "pending");
     assert.equal(page.invitation.message, "Hello there");
     assert.equal(page.invitation.tokenHash, undefined);
@@ -171,7 +173,10 @@ describe("accepting", () => {
 
     const detail = (await admin.get(`/api/admin/users/${user.user.id}`)).body;
     assert.equal(detail.subscription.planName, "Invited Plan");
-    assert.equal(detail.limits.includedMinutes, 77);
+    const account = (await admin.get(`/api/admin/users/${user.user.id}/credits`)).body;
+    assert.equal(account.plan.monthlyCredits, 770);
+    // The welcome credits from sign-up, and the plan's credits from accepting.
+    assert.equal(account.balance, 100 + 770);
     assert.equal(detail.user.source, "invited");
     assert.equal(detail.user.admin, false);
 

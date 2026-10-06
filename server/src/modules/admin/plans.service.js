@@ -3,6 +3,7 @@ import { Plan, Subscription } from "../../models/index.js";
 import { PLAN_TEMPLATES } from "./plan.templates.js";
 import { getStorage } from "../../integrations/storage/registry.js";
 import { logger } from "../../config/logger.js";
+import { ensureGrants, getRates, planCredits } from "../billing/credit.service.js";
 import { fail } from "./admin.shared.js";
 
 /**
@@ -18,14 +19,19 @@ import { fail } from "./admin.shared.js";
 const THUMBNAIL_TYPES = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
 const THUMBNAIL_MAX_BYTES = 5 * 1024 * 1024;
 
-/** Plan plus how many workspaces are on it. */
+/**
+ * Plan plus how many workspaces are on it, and what it gives each month. A plan
+ * made before credits existed has no monthlyCredits of its own; it is shown at
+ * what its minutes are worth, so the admin sees what users actually get.
+ */
 async function withUsers(plans) {
+  const rates = await getRates();
   const counts = await Subscription.aggregate([
     { $match: { planId: { $in: plans.map((p) => p._id) } } },
     { $group: { _id: "$planId", n: { $sum: 1 } } },
   ]);
   const byPlan = new Map(counts.map((c) => [String(c._id), c.n]));
-  return plans.map((p) => ({ ...p, users: byPlan.get(String(p._id)) || 0 }));
+  return plans.map((p) => ({ ...p, monthlyCredits: planCredits(p, rates), users: byPlan.get(String(p._id)) || 0 }));
 }
 
 /** Only one default: making a plan default clears it everywhere else. */
@@ -82,6 +88,17 @@ export const plansService = {
     await plan.save();
     if (plan.isDefault) await claimDefault(plan._id);
     if (replacedThumbnail) await dropThumbnail(replacedThumbnail);
+
+    // More monthly credits reach everyone on the plan now, rather than the next
+    // time each of them looks - so the numbers an admin sees are the real ones.
+    if (fields.monthlyCredits !== undefined) {
+      const onPlan = await Subscription.find({ planId: plan._id }).select("workspaceId").lean();
+      for (const { workspaceId } of onPlan) {
+        await ensureGrants(workspaceId).catch((err) =>
+          logger.warn({ err: err.message, workspaceId: String(workspaceId) }, "could not top up plan credits"),
+        );
+      }
+    }
     return (await withUsers([plan.toObject()]))[0];
   },
 
@@ -154,6 +171,10 @@ export const plansService = {
         },
       },
       { upsert: true },
+    );
+    // The plan's credits are on the account straight away, not at the next look.
+    await ensureGrants(workspaceId).catch((err) =>
+      logger.warn({ err: err.message, workspaceId: String(workspaceId) }, "could not grant plan credits"),
     );
     return previous?.plan || null;
   },

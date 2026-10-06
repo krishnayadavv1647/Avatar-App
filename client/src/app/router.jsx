@@ -11,6 +11,7 @@ import TalkPage from "@/features/talk/TalkPage";
 import Usage from "@/features/analytics/Usage";
 import OAuthConsent from "@/features/connect/OAuthConsent";
 import ConnectAiTools from "@/features/connect/ConnectAiTools";
+import CreditsPage from "@/features/credits/CreditsPage";
 import ConversationList from "@/features/conversations/ConversationList";
 import ConversationDetail from "@/features/conversations/ConversationDetail";
 import DesignPreview from "@/features/_design/DesignPreview";
@@ -64,6 +65,7 @@ export default function AppRouter() {
           </RequireAuth>
         }
       />
+      <Route path="/credits" element={app(<CreditsPage />)} />
       <Route path="/connect" element={app(<ConnectAiTools />)} />
       <Route path="/notifications" element={app(<NotificationsPage />)} />
       <Route path="/conversations" element={app(<ConversationList />)} />

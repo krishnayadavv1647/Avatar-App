@@ -5,6 +5,7 @@ import { authApi } from "@/services/auth.api";
 import { useAuth } from "@/store/auth.store";
 import { useUi } from "@/store/ui.store";
 import { useIsAdmin } from "@/features/admin/useIsAdmin";
+import CreditChip from "@/features/credits/CreditChip";
 import { useBranding } from "@/hooks/useBranding";
 import NotificationPopup from "@/features/site/NotificationPopup";
 import { useNotificationSummary } from "@/features/site/useNotificationSummary";
@@ -211,6 +212,7 @@ export default function Sidebar() {
       </nav>
 
       <div className={clsx("border-t border-border", collapsed ? "p-2" : "p-3")}>
+        <CreditChip collapsed={collapsed} />
         <AccountCard collapsed={collapsed} />
       </div>
     </aside>

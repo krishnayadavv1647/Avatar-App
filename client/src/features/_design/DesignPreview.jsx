@@ -3,6 +3,7 @@ import Card from "@/components/common/Card";
 import Button from "@/components/common/Button";
 import Field from "@/components/forms/Field";
 import Segmented from "@/components/forms/Segmented";
+import OrbDemo from "./OrbDemo";
 
 /**
  * Visual verification surface for the design system. Not part of the product -
@@ -85,6 +86,10 @@ export default function DesignPreview() {
             </div>
           </Card>
         </div>
+      </Section>
+
+      <Section eyebrow="Call connecting animation">
+        <OrbDemo />
       </Section>
 
       <Section eyebrow="Palette">

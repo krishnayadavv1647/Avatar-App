@@ -1,3 +1,4 @@
+import { getRates, minutesFor, planCredits } from "../billing/credit.service.js";
 import { z } from "zod";
 import { EmailList, EmailListMember, Subscription, User } from "../../models/index.js";
 
@@ -120,15 +121,16 @@ async function listMembers(listIds) {
 async function planByWorkspace(workspaceIds) {
   const subscriptions = await Subscription.find({ workspaceId: { $in: workspaceIds } })
     .select("workspaceId planId includedMinutes")
-    .populate("planId", "name includedMinutes")
+    .populate("planId", "name includedMinutes monthlyCredits unlimitedCredits")
     .lean();
+  const rates = await getRates();
   return new Map(
     subscriptions.map((s) => [
       String(s.workspaceId),
       {
         id: s.planId ? String(s.planId._id) : undefined,
         name: s.planId?.name,
-        minutes: s.planId?.includedMinutes ?? s.includedMinutes,
+        minutes: s.planId ? minutesFor(planCredits(s.planId, rates), rates.standard) : s.includedMinutes,
       },
     ]),
   );

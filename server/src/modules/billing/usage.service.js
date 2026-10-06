@@ -2,6 +2,7 @@ import { Avatar, Conversation, Plan, Subscription, UsageLedger } from "../../mod
 import { CAPABILITIES } from "../../avatar/capabilities.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
+import { assertCanStartCall as assertCredits, chargeConversation, summary as summarizeCredits } from "./credit.service.js";
 
 /**
  * Metering and the limits that depend on it.
@@ -26,7 +27,12 @@ export const usageService = {
       conversationId: conversation._id,
       kind: "conversation",
     }).lean();
-    if (existing) return existing;
+    if (existing) {
+      // Charged already, or the process that wrote the ledger died before it did;
+      // the charge is idempotent either way.
+      await chargeConversation(conversation);
+      return existing;
+    }
 
     const minutes = Math.max(0, conversation.durationSec || 0) / 60;
     const rate = CAPABILITIES[conversation.providerId]?.approxCostPerMinUsd ?? 0;
@@ -52,6 +58,8 @@ export const usageService = {
     }
 
     await Conversation.updateOne({ _id: conversation._id }, { $set: { costCents } });
+    // What the person pays, in credits: the seconds the call ran, at the rate it started with.
+    await chargeConversation(conversation);
 
     logger.info(
       { conversationId: String(conversation._id), minutes: entry.minutes, costCents },
@@ -81,7 +89,7 @@ export const usageService = {
    * time, so it is enforced before a session is created rather than reported
    * afterwards.
    */
-  async assertCanStartCall(workspace) {
+  async assertCanStartCall(workspace, { rate }) {
     const limits = await this.limitsFor(workspace);
     const limit = limits.concurrencyLimit;
     const active = await this.activeCallCount(workspace._id);
@@ -94,23 +102,8 @@ export const usageService = {
       throw err;
     }
 
-    if (limits.overageEnabled) return;
-
-    const used = await this.minutesThisPeriod(workspace._id);
-    // Bonus minutes ride on top of a metered plan. An unmetered one (0 included)
-    // stays unmetered: a bonus must not turn "no cap" into a small one.
-    const included = limits.allowanceMinutes;
-
-    // Zero included minutes means the plan is not metered this way (the free
-    // tier during development), not that every call should be refused.
-    if (included > 0 && used >= included) {
-      const err = new Error(
-        `Monthly allowance used (${used.toFixed(1)} of ${included} minutes). ` +
-          `Enable overage in billing to keep going.`,
-      );
-      err.statusCode = 402;
-      throw err;
-    }
+    // What a call is paid for in: credits, at the avatar's rate per minute.
+    await assertCredits(workspace._id, rate);
   },
 
   /**
@@ -211,6 +204,7 @@ export const usageService = {
         calls: p.calls,
       })),
       activeCalls: await this.activeCallCount(workspaceId),
+      credits: await summarizeCredits({ _id: workspaceId }),
       plan: limits
         ? {
             name: limits.planName,

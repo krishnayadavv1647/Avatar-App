@@ -9,20 +9,20 @@ import Field from "@/components/forms/Field";
 import { Badge, Label, Select, TextArea } from "@/components/forms/controls";
 import { toast } from "@/components/feedback/Toast";
 import { money } from "../format";
-import { planMinutesLabel } from "./userUi";
+import UserCreditsCard from "./UserCreditsCard";
+import { planCreditsLabel } from "./userUi";
 
 const startingForm = (user) => ({
   name: user.name || "",
   organization: user.organization || "",
   status: user.status,
   role: user.role,
-  bonusMinutes: String(user.bonusMinutes || 0),
   planId: user.planId ? String(user.planId) : "",
   blockReason: "",
 });
 
 /**
- * "Edit User": profile, status and role, bonus minutes, and the plan - one
+ * "Edit User": profile, status and role, and the plan - one
  * save. Only what changed is sent. Moving someone to a plan applies it from
  * their next call and emails them (when mail is set up).
  *
@@ -43,7 +43,6 @@ export default function EditUserDialog({ user, plans, onClose, onSaved }) {
     if (form.organization.trim() !== (user.organization || "")) out.organization = form.organization.trim();
     if (form.status !== user.status) out.status = form.status;
     if (form.role !== user.role) out.role = form.role;
-    if (Number(form.bonusMinutes) !== (user.bonusMinutes || 0)) out.bonusMinutes = Number(form.bonusMinutes) || 0;
     if (form.planId && form.planId !== String(user.planId || "")) out.planId = form.planId;
     if (suspending && form.blockReason.trim()) out.blockReason = form.blockReason.trim();
     return out;
@@ -78,7 +77,7 @@ export default function EditUserDialog({ user, plans, onClose, onSaved }) {
       open
       onClose={close}
       title={`Edit User: ${user.name || user.email}`}
-      description="Update user information, plan assignment, and bonus minutes."
+      description="Update user information, plan assignment, and credits."
       footer={
         <>
           <Button variant="ghost" onClick={close} disabled={save.isPending}>
@@ -139,29 +138,19 @@ export default function EditUserDialog({ user, plans, onClose, onSaved }) {
             )}
 
             <div>
-              <Label htmlFor="edit-plan-minutes">Plan minutes</Label>
+              <Label htmlFor="edit-plan-credits">Plan credits</Label>
               <input
-                id="edit-plan-minutes"
+                id="edit-plan-credits"
                 readOnly
-                value={selectedPlan ? planMinutesLabel(selectedPlan.includedMinutes) : "No plan"}
+                value={selectedPlan ? planCreditsLabel(selectedPlan) : "No plan"}
                 className="h-10 w-full rounded border border-border bg-bg px-3 text-ui text-text opacity-60 outline-none"
               />
-              <p className="mt-1.5 text-label text-text-faint">The base minutes from the assigned plan</p>
-            </div>
-
-            <div>
-              <Field
-                label="Bonus Minutes"
-                id="edit-bonus"
-                type="number"
-                min="0"
-                value={form.bonusMinutes}
-                onChange={(bonusMinutes) => set({ bonusMinutes })}
-                hint="Additional minutes you can assign manually (independent of plans). Not used when the plan has no monthly cap."
-              />
+              <p className="mt-1.5 text-label text-text-faint">What the assigned plan adds to their balance each month</p>
             </div>
           </div>
         </Card>
+
+        <UserCreditsCard userId={user.id} />
 
         <Card title="Plan Assignment" className="bg-surface-2">
           <p className="mt-1 text-label text-text-faint">
@@ -195,7 +184,7 @@ export default function EditUserDialog({ user, plans, onClose, onSaved }) {
                       <Badge tone="outline">
                         {plan.priceCents ? `${money(plan.priceCents)}${plan.durationType === "lifetime" ? " one time" : "/mo"}` : "Free"}
                       </Badge>
-                      <Badge tone="outline">{plan.includedMinutes ? `${plan.includedMinutes.toLocaleString()} minutes` : "No minute cap"}</Badge>
+                      <Badge tone="outline">{planCreditsLabel(plan)}</Badge>
                     </span>
                   </span>
                 </label>

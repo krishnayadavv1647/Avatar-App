@@ -2,6 +2,7 @@ import { avatarService } from "./avatar.service.js";
 import { knowledgeService } from "./knowledge.service.js";
 import { mcpService } from "./mcp.service.js";
 import { previewService } from "./preview.service.js";
+import { previewImageService } from "./previewImage.service.js";
 import { studioService } from "../studio/studio.service.js";
 import { roomService } from "../rooms/room.service.js";
 import { asyncHandler } from "../../middleware/validate.js";
@@ -116,6 +117,13 @@ export const avatarController = {
   }),
 
   /** Makes (or remakes) the avatar's hover clip; see preview.service.js. */
+  /** The still picture, same-origin, for the call screen's connecting animation. */
+  previewImage: asyncHandler(async (req, res) => {
+    const { buffer, type } = await previewImageService.get(req.workspace._id, req.params.id);
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.type(type).send(buffer);
+  }),
+
   makePreview: asyncHandler(async (req, res) => {
     // get() is scoped to the workspace, so another workspace's avatar 404s.
     await avatarService.get(req.workspace._id, req.params.id);

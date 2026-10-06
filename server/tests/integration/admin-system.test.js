@@ -292,12 +292,12 @@ describe("API keys", () => {
     const { status, body } = await admin.get("/api/admin/api-configs");
 
     assert.equal(status, 200);
-    assert.deepEqual(body.configs.map((c) => c.serviceName), ["lemonslice", "anthropic", "elevenlabs", "kie_ai"]);
+    assert.deepEqual(body.configs.map((c) => c.serviceName), ["lemonslice", "anthropic", "elevenlabs", "kie_ai", "stripe", "stripe_webhook"]);
     const lemon = body.configs[0];
     assert.equal(lemon.required, true);
     assert.equal(lemon.envVar, "LEMONSLICE_API_KEY");
     assert.deepEqual(lemon.key, { hasKey: false, last4: null, source: "none", storedInDatabase: false });
-    assert.deepEqual(body.environment.map((e) => e.id), ["livekit", "storage", "stripe"]);
+    assert.deepEqual(body.environment.map((e) => e.id), ["livekit", "storage"]);
   });
 
   test("never returns a key, in any response or in the database as plain text", async () => {

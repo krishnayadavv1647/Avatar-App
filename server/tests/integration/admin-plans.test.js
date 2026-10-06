@@ -80,14 +80,48 @@ describe("presentation fields", () => {
     assert.ok(ids.indexOf(early._id) < ids.indexOf(late._id));
   });
 
-  test("changing a plan needs no re-sync: the limits are read live", async () => {
-    const plan = (await createPlan({ includedMinutes: 10 })).body.plan;
+  test("changing a plan needs no re-sync: what it gives is read live", async () => {
+    const plan = (await createPlan({ monthlyCredits: 100 })).body.plan;
     const user = await signUp(app.baseUrl);
     await admin.put(`/api/admin/users/${user.user.id}/plan`, { planId: plan._id });
 
-    await admin.patch(`/api/admin/plans/${plan._id}`, { includedMinutes: 500 });
-    const detail = (await admin.get(`/api/admin/users/${user.user.id}`)).body;
-    assert.equal(detail.limits.includedMinutes, 500);
+    await admin.patch(`/api/admin/plans/${plan._id}`, { monthlyCredits: 500 });
+    const { body } = await admin.get(`/api/admin/users/${user.user.id}/credits`);
+    assert.equal(body.plan.monthlyCredits, 500);
+    // 100 welcome credits at sign-up, then the plan's 100, then the 400 this edit added.
+    assert.equal(body.balance, 600);
+  });
+});
+
+describe("credits fields", () => {
+  test("a plan gives monthly credits, or is unlimited", async () => {
+    const { body } = await createPlan({ monthlyCredits: 1500 });
+    assert.equal(body.plan.monthlyCredits, 1500);
+    assert.equal(body.plan.unlimitedCredits, false);
+
+    const unlimited = await admin.patch(`/api/admin/plans/${body.plan._id}`, { unlimitedCredits: true });
+    assert.equal(unlimited.body.plan.unlimitedCredits, true);
+  });
+
+  test("a plan from before credits is listed at what its minutes are worth", async () => {
+    const { Plan } = await import("../../src/models/index.js");
+    const legacy = await Plan.create({ key: `legacy-${counter}`, name: "Legacy", includedMinutes: 50 });
+
+    const { body } = await admin.get("/api/admin/plans");
+    // 10 credits to a Standard minute.
+    assert.equal(body.plans.find((p) => p._id === String(legacy._id)).monthlyCredits, 500);
+  });
+
+  test("the old minute fields are refused, as are negative credits", async () => {
+    assert.equal((await createPlan({ includedMinutes: 10 })).status, 400);
+    assert.equal((await createPlan({ overageEnabled: true })).status, 400);
+    assert.equal((await createPlan({ monthlyCredits: -1 })).status, 400);
+  });
+
+  test("the ready-made plans give credits", async () => {
+    const { body } = await admin.post("/api/admin/plans/templates");
+    const byKey = Object.fromEntries(body.plans.map((p) => [p.key, p.monthlyCredits]));
+    assert.deepEqual([byKey.free, byKey.starter, byKey.pro, byKey.business], [100, 1000, 4000, 12000]);
   });
 });
 

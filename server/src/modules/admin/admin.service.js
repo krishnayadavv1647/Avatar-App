@@ -2,6 +2,7 @@ import {
   Avatar,
   Invitation,
   Conversation,
+  CreditAccount,
   KnowledgeDocument,
   Plan,
   Subscription,
@@ -12,6 +13,7 @@ import {
 import { isPlatformAdmin, isSuperAdmin } from "../../middleware/admin.js";
 import { authService } from "../auth/auth.service.js";
 import { usageService } from "../billing/usage.service.js";
+import { creditService, getRates, planCredits, round2 } from "../billing/credit.service.js";
 import { plansService } from "./plans.service.js";
 import { audit, endLiveCalls, fail, notFound } from "./admin.shared.js";
 import { logger } from "../../config/logger.js";
@@ -193,7 +195,7 @@ export const adminService = {
       await Promise.all([
         Workspace.findById(workspaceId).select("name createdAt settings").lean(),
         Subscription.findOne({ workspaceId })
-          .select("plan planId status assignedAt bonusMinutes")
+          .select("plan planId status assignedAt")
           .populate("planId", "name key")
           .lean(),
         Avatar.find({ workspaceId })
@@ -235,8 +237,8 @@ export const adminService = {
         planName: subscription.planId?.name || null,
         status: subscription.status,
         assignedAt: subscription.assignedAt || null,
-        bonusMinutes: subscription.bonusMinutes || 0,
       },
+      credits: workspace ? await creditService.summary(workspace) : null,
       limits,
       minutesThisMonth: minutes(minutesThisMonth * 60),
       stats: {
@@ -405,9 +407,9 @@ export async function userFilter({ q, status, plan, source } = {}) {
  */
 export async function userRows(users) {
   const workspaceIds = users.map((u) => u.workspaceId).filter(Boolean);
-  const [avatarCounts, callStats, subscriptions, workspaces] = await Promise.all([
+  const [avatarCounts, callStats, subscriptions, workspaces, creditAccounts, rates] = await Promise.all([
     Avatar.aggregate([
-      { $match: { workspaceId: { $in: workspaceIds } } },
+      { $match: { workspaceId: { $in: workspaceIds }, draft: { $ne: true } } },
       { $group: { _id: "$workspaceId", n: { $sum: 1 } } },
     ]),
     Conversation.aggregate([
@@ -422,12 +424,15 @@ export async function userRows(users) {
       },
     ]),
     Subscription.find({ workspaceId: { $in: workspaceIds } })
-      .select("workspaceId plan planId bonusMinutes includedMinutes")
-      .populate("planId", "name includedMinutes")
+      .select("workspaceId plan planId includedMinutes")
+      .populate("planId", "name includedMinutes monthlyCredits unlimitedCredits")
       .lean(),
     Workspace.find({ _id: { $in: workspaceIds } }).select("name").lean(),
+    CreditAccount.find({ workspaceId: { $in: workspaceIds } }).select("workspaceId balance").lean(),
+    getRates(),
   ]);
 
+  const balances = new Map(creditAccounts.map((a) => [String(a.workspaceId), a.balance]));
   const avatars = keyed(avatarCounts);
   const calls = keyed(callStats);
   const subs = new Map(subscriptions.map((s) => [String(s.workspaceId), s]));
@@ -452,9 +457,10 @@ export async function userRows(users) {
       status: u.blockedAt ? "suspended" : "active",
       plan: sub?.planId?.name || sub?.plan || null,
       planId: sub?.planId?._id || null,
-      // Zero plan minutes means the plan has no monthly cap.
-      planMinutes: sub?.planId ? (sub.planId.includedMinutes ?? 0) : (sub?.includedMinutes ?? 0),
-      bonusMinutes: sub?.bonusMinutes || 0,
+      // What the plan gives each month, and what is left now.
+      planCredits: sub?.planId ? planCredits(sub.planId, rates) : 0,
+      unlimited: Boolean(sub?.planId?.unlimitedCredits),
+      credits: round2(balances.get(ws) || 0),
       workspace: space ? { id: space._id, name: space.name } : null,
       createdAt: u.createdAt,
       lastLoginAt: u.lastLoginAt || null,

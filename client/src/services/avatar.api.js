@@ -42,6 +42,9 @@ export const avatarApi = {
     return api.upload(`/avatars/${id}/visuals`, form).then((r) => r.avatar);
   },
 
+  /** The avatar's still picture as a Blob, same-origin, so a canvas may draw it. */
+  previewImage: (id) => api.blob(`/avatars/${id}/preview-image`),
+
   /** Records the card's hover clip in the background: `{ started, reason? }`. */
   makePreview: (id) => api.post(`/avatars/${id}/preview-video`),
 };

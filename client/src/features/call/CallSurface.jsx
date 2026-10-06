@@ -13,7 +13,7 @@ import DailyCall from "./DailyCall";
  * itself - the time limit, or the far end going away - so the page can move on
  * either way instead of sitting on a dead call.
  */
-export default function CallSurface({ connection, avatar, onEnd, ending, onError }) {
+export default function CallSurface({ connection, avatar, face, onEnd, ending, onError }) {
   if (connection.transport === "daily") {
     // Full-pipeline vendors host the call themselves; we only embed their room.
     return <DailyCall avatar={avatar} joinUrl={connection.url} onHangUp={onEnd} ending={ending} />;
@@ -33,7 +33,7 @@ export default function CallSurface({ connection, avatar, onEnd, ending, onError
       onDisconnected={onEnd}
       onError={(err) => onError?.(err.message)}
     >
-      <ActiveCall avatar={avatar} onHangUp={onEnd} ending={ending} />
+      <ActiveCall avatar={avatar} face={face} onHangUp={onEnd} ending={ending} />
     </LiveKitRoom>
   );
 }
@@ -47,7 +47,7 @@ const STATE_LABEL = {
   disconnected: "Call ended",
 };
 
-function ActiveCall({ avatar, onHangUp, ending }) {
+function ActiveCall({ avatar, face, onHangUp, ending }) {
   const { state } = useVoiceAssistant();
 
   return (
@@ -55,6 +55,7 @@ function ActiveCall({ avatar, onHangUp, ending }) {
       <AvatarStage
         avatarName={avatar.name}
         previewUrl={avatar.previewUrl}
+        face={face}
         isSpeaking={state === "speaking"}
       />
       <CallControls onHangUp={onHangUp} ending={ending} />

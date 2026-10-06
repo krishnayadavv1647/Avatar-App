@@ -9,6 +9,9 @@ export const linkApi = {
   /** `{ avatar: { name, previewUrl }, available }` */
   describe: (token) => api.get(`/links/${token}`),
 
+  /** The avatar's still picture as a Blob, same-origin, so a canvas may draw it. */
+  previewImage: (token) => api.blob(`/links/${token}/preview-image`),
+
   /** Connection envelope plus `callToken`, needed to end the call. */
   start: (token, { name, email }) => api.post(`/links/${token}/calls`, { name, email }),
 

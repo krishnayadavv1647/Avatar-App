@@ -16,8 +16,9 @@ import { getStorage } from "../../../integrations/storage/registry.js";
  * and keeps - applyKey() updates that instance's key as well, so no provider
  * needs a restart.
  *
- * Credentials that cannot be swapped under a running process (LiveKit, R2,
- * Stripe) are not editable here; environmentStatus() only reports them.
+ * Credentials that cannot be swapped under a running process (LiveKit, R2) are
+ * not editable here; environmentStatus() only reports them. Stripe's keys are
+ * editable: checkout and the webhook read env.stripe.* on every request.
  *
  * Deepgram and Cartesia keys exist in config/env.js but nothing reads them -
  * speech goes through LiveKit Inference - so they are deliberately not listed:
@@ -37,8 +38,9 @@ const fail = (status, message) => Object.assign(new Error(message), { statusCode
  * @property {string} documentation
  * @property {() => string} get     the env value right now
  * @property {(value: string) => void} set
- * @property {(baseUrl: string, key: string) => { url: string, headers: Record<string,string> }} probe
- *   a cheap, authenticated, read-only request that distinguishes a bad key from a good one
+ * @property {(baseUrl: string, key: string) => { url: string, headers: Record<string,string> }} [probe]
+ *   a cheap, authenticated, read-only request that distinguishes a bad key from a good one.
+ *   Absent for a secret with nothing to call (Stripe's webhook signing secret).
  */
 
 /** @type {ProviderDef[]} */
@@ -107,6 +109,34 @@ export const API_PROVIDERS = [
     },
     // The remaining-credits call: authenticated, read-only, and free.
     probe: (base, key) => ({ url: `${base}/api/v1/chat/credit`, headers: { Authorization: `Bearer ${key}` } }),
+  },
+  {
+    serviceName: "stripe",
+    displayName: "Stripe (secret key)",
+    description: "Takes payment when someone buys a credit pack. Without it packs cannot be bought.",
+    envVar: "STRIPE_SECRET_KEY",
+    baseUrl: "https://api.stripe.com",
+    documentation: "https://docs.stripe.com/keys",
+    get: () => env.stripe.secretKey,
+    set: (value) => {
+      env.stripe.secretKey = value;
+    },
+    // The account balance: authenticated, read-only, and free.
+    probe: (base, key) => ({ url: `${base}/v1/balance`, headers: { Authorization: `Bearer ${key}` } }),
+  },
+  {
+    serviceName: "stripe_webhook",
+    displayName: "Stripe (webhook signing secret)",
+    description:
+      "Proves that a payment message really came from Stripe. Without it purchases are paid for but never credited.",
+    envVar: "STRIPE_WEBHOOK_SECRET",
+    baseUrl: "https://api.stripe.com",
+    documentation: "https://docs.stripe.com/webhooks#verify-events",
+    get: () => env.stripe.webhookSecret,
+    set: (value) => {
+      env.stripe.webhookSecret = value;
+    },
+    // No probe: there is nothing to call with a signing secret.
   },
 ];
 
@@ -309,6 +339,18 @@ export const apiConfigService = {
     const key = storedKey(row) || envOriginals.get(serviceName) || "";
     if (!key) throw fail(400, "No API key to test. Save one first.");
 
+    // A signing secret has nothing to call; it is only proven when Stripe sends
+    // an event, so this is neither a pass nor a failure and no counter moves.
+    if (!def.probe) {
+      return {
+        outcome: "info",
+        ok: true,
+        status: null,
+        source: storedKey(row) ? "database" : "environment",
+        message: "This secret is checked when Stripe sends an event; use 'Send test webhook' in the Stripe dashboard.",
+      };
+    }
+
     const base = (row.baseUrl || def.baseUrl).replace(/\/+$/, "");
     const { url, headers } = def.probe(base, key);
 
@@ -411,9 +453,5 @@ function environmentStatus() {
           ]
         : [field("Driver", "STORAGE_DRIVER", env.storageDriver, { secret: false })],
     ),
-    group("stripe", "Stripe", "Payments. Read at startup.", [
-      field("Secret key", "STRIPE_SECRET_KEY", env.stripe.secretKey),
-      field("Webhook secret", "STRIPE_WEBHOOK_SECRET", env.stripe.webhookSecret),
-    ]),
   ];
 }

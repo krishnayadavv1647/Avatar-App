@@ -4,6 +4,7 @@ import { CAPABILITIES } from "../../avatar/capabilities.js";
 import { getProvider } from "../../avatar/providers/registry.js";
 import { createJoinToken, dispatchAgent, endRoom } from "../../integrations/livekit/index.js";
 import { usageService } from "../billing/usage.service.js";
+import { getRates, rateFor } from "../billing/credit.service.js";
 import { logger } from "../../config/logger.js";
 import { env } from "../../config/env.js";
 import { preflight } from "../../agent/preflight.js";
@@ -34,16 +35,17 @@ export const roomService = {
   async startCall({ workspace, avatarId, userId, source = "app", guest, meetingUrl }) {
     await this.expireStale(workspace._id);
 
-    // Checked before anything is created, so a refused call leaves no record
-    // and reserves no vendor session.
-    await usageService.assertCanStartCall(workspace);
-
     const avatar = await Avatar.findOne({ _id: avatarId, workspaceId: workspace._id }).lean();
     if (!avatar) {
       const err = new Error("Avatar not found");
       err.statusCode = 404;
       throw err;
     }
+
+    // Checked before anything is created, so a refused call leaves no record
+    // and reserves no vendor session. The rate depends on how the avatar is drawn.
+    const creditRate = rateFor(await getRates(), avatar);
+    await usageService.assertCanStartCall(workspace, { rate: creditRate });
     if (avatar.status !== "ready") {
       const err = new Error(`Avatar is ${avatar.status}, not ready to call`);
       err.statusCode = 409;
@@ -90,6 +92,7 @@ export const roomService = {
       guest,
       ...(meetingUrl && { meetingUrl }),
       roomName,
+      creditRate,
       providerId: avatar.providerId,
       pipelineMode: capabilities.pipelineMode,
       transport: capabilities.transport,

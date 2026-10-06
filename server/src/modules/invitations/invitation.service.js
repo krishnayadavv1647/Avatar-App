@@ -1,3 +1,4 @@
+import { getRates, planCredits } from "../billing/credit.service.js";
 import crypto from "node:crypto";
 import { Invitation, Plan, User } from "../../models/index.js";
 import { sendEmail } from "../../integrations/mail/index.js";
@@ -174,7 +175,12 @@ export const invitationService = {
         status: invitation.status,
         expiresAt: invitation.expiresAt,
         message: invitation.message || null,
-        plan: plan && { name: plan.name, description: plan.description || null, includedMinutes: plan.includedMinutes ?? 0 },
+        plan: plan && {
+          name: plan.name,
+          description: plan.description || null,
+          monthlyCredits: planCredits(plan, await getRates()),
+          unlimited: Boolean(plan.unlimitedCredits),
+        },
       },
     };
   },

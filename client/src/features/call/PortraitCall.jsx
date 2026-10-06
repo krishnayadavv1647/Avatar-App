@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import CreditMeter from "@/features/credits/CreditMeter";
+import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import {
   LiveKitRoom,
@@ -10,6 +11,7 @@ import {
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
 import MediaPreview from "@/components/media/MediaPreview";
+import CallOrb, { avatarFace, warmFace } from "./CallOrb";
 import DailyCall from "./DailyCall";
 import { useCall } from "./useCall";
 
@@ -41,6 +43,42 @@ const frameWidth = (ratio) => ({
 export default function PortraitCall({ avatar }) {
   const { connection, starting, ending, error, setError, start, hangUp } = useCall(avatar._id);
 
+  // The connecting animation (CallOrb). It runs from pressing Start until the live
+  // video is there and the bubble has swelled back into a sharp card; then the
+  // canvas fades and the video shows. Anyone who asked their system for less motion,
+  // or whose browser has no WebGL, gets the plain screen instead.
+  const [hasVideo, setHasVideo] = useState(false);
+  const [orbReady, setOrbReady] = useState(false);
+  const [orbFading, setOrbFading] = useState(false);
+  const [orbDone, setOrbDone] = useState(false);
+  const [orbOff, setOrbOff] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  // The picture is fetched ahead, so the bubble has something to draw the moment Start is pressed.
+  const face = useMemo(() => avatarFace(avatar), [avatar]);
+  useEffect(() => {
+    if (!orbOff) warmFace(face);
+  }, [face, orbOff]);
+
+  // A call that ended, or never started, leaves nothing to carry into the next one.
+  useEffect(() => {
+    if (connection || starting) return;
+    setHasVideo(false);
+    setOrbReady(false);
+    setOrbFading(false);
+    setOrbDone(false);
+  }, [connection, starting]);
+
+  useEffect(() => {
+    if (!orbFading) return undefined;
+    const id = setTimeout(() => setOrbDone(true), 400); // the canvas's own fade
+    return () => clearTimeout(id);
+  }, [orbFading]);
+
+  const orbOn = !orbOff && !orbDone && (starting || Boolean(connection));
+  // Only once the bubble has its picture does the page stand down its own copy.
+  const coveredByOrb = orbOn && orbReady;
+  const revealed = orbOff || orbFading || orbDone;
+
   if (connection && connection.transport !== "livekit") {
     return (
       <div className="w-full max-w-2xl">
@@ -57,37 +95,65 @@ export default function PortraitCall({ avatar }) {
 
   return (
     <div className="flex w-full flex-col items-center">
-      <div className={frame} style={frameWidth(RATIO[aspect])}>
-        {connection ? (
-          <LiveKitRoom
-            token={connection.token}
-            serverUrl={connection.url}
-            connect
-            audio
-            video={false}
-            onDisconnected={hangUp}
-            onError={(err) => setError(err.message)}
-            className="absolute inset-0"
-          >
-            <Live avatar={avatar} onHangUp={hangUp} ending={ending} />
-          </LiveKitRoom>
-        ) : (
-          <>
-            <Preview avatar={avatar} dim={starting} />
-            <div className="absolute inset-x-0 bottom-6 flex justify-center">
-              <button
-                type="button"
-                onClick={start}
-                disabled={starting || !avatar.callable}
-                className="flex h-12 items-center gap-2.5 rounded-full bg-black/55 px-5 text-body font-semibold text-white backdrop-blur transition-colors hover:bg-black/70 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <CameraIcon />
-                {starting ? "Connecting…" : "Start call"}
-              </button>
-            </div>
-          </>
+      {/* The animation's glow reaches past the frame, so it is drawn outside the frame's clipping. */}
+      <div className="relative" style={frameWidth(RATIO[aspect])}>
+        <div className={clsx(frame, "w-full", coveredByOrb && "bg-transparent")}>
+          {connection ? (
+            <LiveKitRoom
+              token={connection.token}
+              serverUrl={connection.url}
+              connect
+              audio
+              video={false}
+              onDisconnected={hangUp}
+              onError={(err) => setError(err.message)}
+              className="absolute inset-0"
+            >
+              <Live
+                avatar={avatar}
+                onHangUp={hangUp}
+                ending={ending}
+                revealed={revealed}
+                coveredByOrb={coveredByOrb}
+                onVideo={setHasVideo}
+              />
+            </LiveKitRoom>
+          ) : (
+            <>
+              {!coveredByOrb && <Preview avatar={avatar} dim={starting} />}
+              {starting && orbOn ? (
+                <StatusPill>Connecting…</StatusPill>
+              ) : (
+                <div className="absolute inset-x-0 bottom-6 z-20 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={start}
+                    disabled={starting || !avatar.callable}
+                    className="flex h-12 items-center gap-2.5 rounded-full bg-black/55 px-5 text-body font-semibold text-white backdrop-blur transition-colors hover:bg-black/70 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <CameraIcon />
+                    {starting ? "Connecting…" : "Start call"}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {orbOn && (
+          <CallOrb
+            face={face}
+            state={hasVideo ? "connected" : "calling"}
+            fading={orbFading}
+            onReady={() => setOrbReady(true)}
+            onSettled={() => setOrbFading(true)}
+            onUnsupported={() => setOrbOff(true)}
+          />
         )}
+
       </div>
+
+      {avatar.callable && <CreditMeter avatar={avatar} calling={Boolean(connection)} />}
 
       {error && (
         <p className="mt-4 max-w-md rounded border border-red-line bg-red-dim px-4 py-3 text-center text-ui text-red">
@@ -136,12 +202,18 @@ const STATE_LABEL = {
   disconnected: "Call ended",
 };
 
-function Live({ avatar, onHangUp, ending }) {
+function Live({ avatar, onHangUp, ending, revealed = true, coveredByOrb = false, onVideo }) {
   const { state } = useVoiceAssistant();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
   // The agent is the only remote participant; its camera track is the avatar.
   const tracks = useTracks([Track.Source.Camera], { onlySubscribed: true });
   const video = tracks.find((t) => !t.participant.isLocal);
+
+  // Tells the page the avatar is here, which is what turns the bubble back into a card.
+  useEffect(() => {
+    onVideo?.(Boolean(video));
+    return () => onVideo?.(false);
+  }, [video, onVideo]);
 
   // The worker ends a call it cannot start, which hangs up here too. If
   // nothing has joined at all after a while - no worker picked the call up -
@@ -156,23 +228,29 @@ function Live({ avatar, onHangUp, ending }) {
   return (
     <>
       {video ? (
-        <VideoTrack trackRef={video} className="absolute inset-0 h-full w-full object-cover" />
+        // Held back until the bubble has swelled into a card, then faded in.
+        <VideoTrack
+          trackRef={video}
+          className={clsx(
+            "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
+            revealed ? "opacity-100" : "opacity-0",
+          )}
+        />
       ) : (
-        // The vendor takes a moment to publish; keep the face up meanwhile.
-        <Preview avatar={avatar} dim />
+        // The vendor takes a moment to publish; keep the face up meanwhile (the bubble is
+        // showing it when the animation is on).
+        !coveredByOrb && <Preview avatar={avatar} dim />
       )}
 
-      <span className="absolute left-1/2 top-5 -translate-x-1/2 rounded-full bg-black/55 px-3.5 py-1.5 text-ui font-medium text-white backdrop-blur">
-        {video ? STATE_LABEL[state] || "Connecting…" : "Connecting…"}
-      </span>
+      <StatusPill>{video ? STATE_LABEL[state] || "Connecting…" : "Connecting…"}</StatusPill>
 
       {slow && !video && (
-        <p className="absolute inset-x-6 bottom-24 rounded-2xl bg-black/65 px-4 py-3 text-center text-ui text-white backdrop-blur">
+        <p className="absolute inset-x-6 bottom-24 z-20 rounded-2xl bg-black/65 px-4 py-3 text-center text-ui text-white backdrop-blur">
           The avatar hasn&apos;t joined yet. End the call and try again in a moment.
         </p>
       )}
 
-      <div className="absolute inset-x-0 bottom-6 flex items-center justify-center gap-3">
+      <div className="absolute inset-x-0 bottom-6 z-20 flex items-center justify-center gap-3">
         <button
           type="button"
           onClick={() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
@@ -199,6 +277,15 @@ function Live({ avatar, onHangUp, ending }) {
       {/* Without this the agent's audio track is never played. */}
       <RoomAudioRenderer />
     </>
+  );
+}
+
+/** The label at the top of the frame. Above the animation's canvas, which would otherwise cover it. */
+function StatusPill({ children }) {
+  return (
+    <span className="absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full bg-black/55 px-3.5 py-1.5 text-ui font-medium text-white backdrop-blur">
+      {children}
+    </span>
   );
 }
 

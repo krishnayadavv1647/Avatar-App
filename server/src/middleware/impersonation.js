@@ -20,6 +20,8 @@ const REFUSED = [
   /^\/api\/oauth\/(authorize|connections)/,
   /^\/api\/auth\/logout$/,
   /^\/api\/admin(\/|$)/,
+  // Spending the user's money is theirs alone to do.
+  /^\/api\/billing\/checkout$/,
 ];
 
 // The one admin-ish call an impersonating session may make: leaving.

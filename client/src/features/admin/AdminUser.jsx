@@ -12,6 +12,7 @@ import AdminGate from "./AdminGate";
 import { Stat, Th } from "./parts";
 import { compact, date, dateTime, duration, money } from "./format";
 import { SOURCE_LABEL } from "./users/userUi";
+import UserCreditsDetail from "./users/UserCreditsDetail";
 import ActAsUserDialog from "./users/ActAsUserDialog";
 import { useActAsUser } from "./impersonation";
 
@@ -95,6 +96,8 @@ function Detail() {
       )}
 
       <PlanCard userId={user.id} subscription={subscription} limits={data.limits} used={data.minutesThisMonth} />
+
+      <UserCreditsDetail userId={user.id} />
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Stat label="Avatars" value={String(stats.avatars)} detail={`${stats.documents} knowledge documents`} />
@@ -180,7 +183,7 @@ function useUserUpdate(id) {
   const queryClient = useQueryClient();
   return (data) => {
     queryClient.setQueryData(["admin-user", String(id)], data);
-    for (const key of ["admin-users", "admin-overview", "admin-plans", "admin-stats"]) {
+    for (const key of ["admin-users", "admin-overview", "admin-plans", "admin-stats", "admin-user-credits"]) {
       queryClient.invalidateQueries({ queryKey: [key] });
     }
   };
@@ -278,11 +281,8 @@ function PlanCard({ userId, subscription, limits, used }) {
     },
   });
 
-  const minutesLine = limits
-    ? limits.includedMinutes
-      ? `${used} of ${limits.allowanceMinutes ?? limits.includedMinutes} min used this month${limits.bonusMinutes ? ` (${limits.includedMinutes} plan + ${limits.bonusMinutes} bonus)` : ""}${limits.overageEnabled ? ", overage on" : ""}`
-      : `${used} min used this month · no monthly cap`
-    : "—";
+  // Minutes used are real usage and stay; what pays for them is the credits card below.
+  const usageLine = `${used} min used this month`;
 
   return (
     <Card>
@@ -296,7 +296,7 @@ function PlanCard({ userId, subscription, limits, used }) {
             )}
           </p>
           <p className="mt-1 text-ui text-text-faint">
-            {minutesLine}
+            {usageLine}
             {limits && ` · ${limits.concurrencyLimit} call${limits.concurrencyLimit === 1 ? "" : "s"} at once`}
             {limits &&
               ` · ${limits.maxAvatars ? `up to ${limits.maxAvatars} avatar${limits.maxAvatars === 1 ? "" : "s"}` : "unlimited avatars"}`}

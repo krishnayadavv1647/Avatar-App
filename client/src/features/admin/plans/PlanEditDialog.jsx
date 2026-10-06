@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/services/admin.api";
 import { adminUsersApi } from "@/services/admin.users.api";
 import Modal from "@/components/common/Modal";
@@ -7,6 +7,7 @@ import Button from "@/components/common/Button";
 import Field from "@/components/forms/Field";
 import { Label, Select, SwitchRow, TextArea } from "@/components/forms/controls";
 import { toast } from "@/components/feedback/Toast";
+import { creditsBuy } from "../users/userUi";
 
 const THUMBNAIL_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const THUMBNAIL_MAX_BYTES = 5 * 1024 * 1024;
@@ -23,13 +24,13 @@ const EMPTY = {
   key: "",
   description: "",
   price: "0",
-  includedMinutes: "0",
+  monthlyCredits: "0",
+  unlimitedCredits: false,
   displayOrder: "0",
   durationType: "monthly",
   conditionBoxDescription: "",
   active: true,
   visible: true,
-  overageEnabled: false,
   isDefault: false,
   concurrencyLimit: "3",
   maxAvatars: "0",
@@ -42,13 +43,13 @@ const fromPlan = (plan) => ({
   key: plan.key,
   description: plan.description || "",
   price: String((plan.priceCents || 0) / 100),
-  includedMinutes: String(plan.includedMinutes ?? 0),
+  monthlyCredits: String(plan.monthlyCredits ?? 0),
+  unlimitedCredits: Boolean(plan.unlimitedCredits),
   displayOrder: String(plan.displayOrder ?? 0),
   durationType: plan.durationType || "monthly",
   conditionBoxDescription: plan.conditionBoxDescription || "",
   active: plan.active !== false,
   visible: plan.visible !== false,
-  overageEnabled: Boolean(plan.overageEnabled),
   isDefault: Boolean(plan.isDefault),
   concurrencyLimit: String(plan.concurrencyLimit ?? 3),
   maxAvatars: String(plan.maxAvatars ?? 0),
@@ -67,6 +68,7 @@ export default function PlanEditDialog({ plan, onClose, onSaved }) {
   const [keyTouched, setKeyTouched] = useState(false);
   const fileInput = useRef(null);
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+  const { data: rates } = useQuery({ queryKey: ["admin-credit-rates"], queryFn: adminUsersApi.creditRates });
 
   const upload = useMutation({
     mutationFn: adminUsersApi.uploadPlanThumbnail,
@@ -97,7 +99,7 @@ export default function PlanEditDialog({ plan, onClose, onSaved }) {
   const submit = (e) => {
     e.preventDefault();
     const price = Number(form.price);
-    const minutes = Number(form.includedMinutes);
+    const credits = Number(form.monthlyCredits);
     const concurrency = Number(form.concurrencyLimit);
     const avatars = Number(form.maxAvatars);
 
@@ -106,7 +108,7 @@ export default function PlanEditDialog({ plan, onClose, onSaved }) {
       return toast.error("Use 2-32 lowercase letters, numbers or dashes for the plan key");
     }
     if (!Number.isFinite(price) || price < 0) return toast.error("Please enter a valid price");
-    if (!Number.isInteger(minutes) || minutes < 0) return toast.error("Please enter a valid minutes amount");
+    if (!Number.isInteger(credits) || credits < 0) return toast.error("Please enter a valid credits amount");
     if (!Number.isInteger(concurrency) || concurrency < 1) return toast.error("Please enter a valid concurrency limit");
     if (!Number.isInteger(avatars) || avatars < 0) return toast.error("Please enter a valid max avatars limit");
 
@@ -114,13 +116,13 @@ export default function PlanEditDialog({ plan, onClose, onSaved }) {
       name: form.name.trim(),
       description: form.description.trim(),
       priceCents: Math.round(price * 100),
-      includedMinutes: minutes,
+      monthlyCredits: credits,
+      unlimitedCredits: form.unlimitedCredits,
       displayOrder: Number(form.displayOrder) || 0,
       durationType: form.durationType,
       conditionBoxDescription: form.conditionBoxDescription.trim(),
       active: form.active,
       visible: form.visible,
-      overageEnabled: form.overageEnabled,
       isDefault: form.isDefault,
       concurrencyLimit: concurrency,
       maxAvatars: avatars,
@@ -138,7 +140,7 @@ export default function PlanEditDialog({ plan, onClose, onSaved }) {
       title={creating ? "Create New Plan" : "Edit Plan"}
       description={
         creating
-          ? "Zero minutes or avatars means no limit."
+          ? "Zero max avatars means no limit."
           : `Changes apply to everyone on this plan from their next call${plan.users ? ` (${plan.users} now)` : ""}.`
       }
       footer={
@@ -197,14 +199,20 @@ export default function PlanEditDialog({ plan, onClose, onSaved }) {
             </div>
             <div>
               <Field
-                label="Included Minutes *"
-                id="plan-minutes"
+                label="Monthly credits *"
+                id="plan-credits"
                 type="number"
                 min="0"
                 step="1"
-                value={form.includedMinutes}
-                hint="0 = no monthly cap"
-                onChange={(includedMinutes) => set({ includedMinutes })}
+                value={form.unlimitedCredits ? "" : form.monthlyCredits}
+                placeholder={form.unlimitedCredits ? "Unlimited" : undefined}
+                disabled={form.unlimitedCredits}
+                hint={
+                  form.unlimitedCredits
+                    ? "Calls on this plan never use credits."
+                    : (creditsBuy(Number(form.monthlyCredits), rates) ?? "Added to the account each month.")
+                }
+                onChange={(monthlyCredits) => set({ monthlyCredits })}
               />
             </div>
             <div>
@@ -222,7 +230,7 @@ export default function PlanEditDialog({ plan, onClose, onSaved }) {
             <div>
               <Label
                 htmlFor="plan-duration"
-                hint={`Shown as "${form.durationType === "lifetime" ? "one time" : "/month"}". A label only: minutes still renew monthly.`}
+                hint={`Shown as "${form.durationType === "lifetime" ? "one time" : "/month"}". A label only: credits are still added monthly.`}
               >
                 Duration Type
               </Label>
@@ -255,10 +263,10 @@ export default function PlanEditDialog({ plan, onClose, onSaved }) {
             onChange={(visible) => set({ visible })}
           />
           <SwitchRow
-            title="Overage enabled"
-            description="Calls keep going past the included minutes instead of being refused"
-            checked={form.overageEnabled}
-            onChange={(overageEnabled) => set({ overageEnabled })}
+            title="Unlimited credits"
+            description="Calls on this plan are never limited or charged by credits"
+            checked={form.unlimitedCredits}
+            onChange={(unlimitedCredits) => set({ unlimitedCredits })}
           />
           <SwitchRow
             title="Default plan"

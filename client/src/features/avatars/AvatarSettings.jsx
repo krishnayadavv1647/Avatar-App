@@ -339,7 +339,9 @@ function Visuals({ avatar, render, options, onRender }) {
           >
             {(options?.renderModels || [{ id: "standard", label: "Standard" }]).map((m) => (
               <option key={m.id} value={m.id}>
+                {/* What a minute costs in credits is part of the choice. */}
                 {m.label}
+                {credits?.rates?.[m.id] ? ` · ${credits.rates[m.id]} credits/min` : ""}
               </option>
             ))}
           </PillSelect>

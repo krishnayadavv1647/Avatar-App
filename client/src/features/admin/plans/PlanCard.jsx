@@ -41,7 +41,9 @@ export default function PlanCard({ plan, onEdit, onDelete }) {
         <div className="my-4 space-y-3 text-ui text-text-muted">
           <div className="flex flex-wrap gap-2">
           <Chip>
-            Minutes: {plan.includedMinutes ? `${plan.includedMinutes.toLocaleString()} ${lifetime ? "one-time" : "monthly"}` : "no cap"}
+            {plan.unlimitedCredits
+              ? "Credits: Unlimited"
+              : `${(plan.monthlyCredits ?? 0).toLocaleString()} credits / month`}
           </Chip>
           <Chip>Display Order: {plan.displayOrder ?? 0}</Chip>
           <Chip>
@@ -62,7 +64,7 @@ export default function PlanCard({ plan, onEdit, onDelete }) {
               {plan.concurrencyLimit} call{plan.concurrencyLimit === 1 ? "" : "s"} at once
             </li>
             <li>{plan.maxAvatars ? `Up to ${plan.maxAvatars} avatar${plan.maxAvatars === 1 ? "" : "s"}` : "Unlimited avatars"}</li>
-            <li>{plan.overageEnabled ? "Overage allowed past the minutes" : "Stops at the minute limit"}</li>
+            <li>{plan.unlimitedCredits ? "Calls never use up credits" : "Calls use credits at the avatar's rate"}</li>
           </ul>
         </div>
       </div>

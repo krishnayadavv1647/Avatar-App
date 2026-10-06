@@ -17,6 +17,13 @@ const planSchema = new mongoose.Schema(
     description: { type: String, trim: true },
     priceCents: { type: Number, min: 0, default: 0 },
 
+    // Credits added to the workspace's balance each month. Unset on plans made
+    // before credits existed: they are worth their included minutes at the
+    // Standard rate (see credit.service planCredits).
+    monthlyCredits: { type: Number, min: 0 },
+    // Calls on this plan are never limited or charged by credits.
+    unlimitedCredits: { type: Boolean, default: false },
+    // The older measure, kept so existing plans still say what they gave.
     includedMinutes: { type: Number, min: 0, default: 0 },
     // Past the included minutes, keep going (and bill) rather than refuse calls.
     overageEnabled: { type: Boolean, default: false },

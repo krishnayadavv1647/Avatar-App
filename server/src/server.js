@@ -5,6 +5,7 @@ import { env, isProd } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { getStorage } from "./integrations/storage/registry.js";
 import { startScheduledEmailLoop } from "./modules/comms/scheduler.js";
+import { startCreditEnforcer, startMonthlyGrants } from "./modules/billing/creditEnforcer.js";
 import { startDraftSweep } from "./modules/studio/previewDraft.service.js";
 import { applyApiConfigs } from "./modules/admin/system/apiConfig.service.js";
 
@@ -59,6 +60,8 @@ async function main() {
     startKeepAlive();
     startScheduledEmailLoop();
     startDraftSweep();
+    startCreditEnforcer();
+    startMonthlyGrants();
   });
 
   // Let in-flight requests finish rather than cutting live connections.

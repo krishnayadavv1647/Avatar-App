@@ -18,6 +18,7 @@ export const CATEGORIES = [
       { value: "avatars", icon: "image", label: "Avatars", component: lazy(() => import("./tabs/AvatarsTab")) },
       { value: "invite", icon: "invite", label: "Invite User", component: lazy(() => import("./tabs/InviteTab")) },
       { value: "plans", icon: "plan", label: "Plans", component: lazy(() => import("./tabs/PlansTab")) },
+      { value: "credits", icon: "coins", label: "Credits", component: lazy(() => import("./tabs/CreditsTab")) },
     ],
   },
   {

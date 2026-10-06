@@ -25,6 +25,8 @@ import invitationRoutes from "./modules/invitations/invitation.routes.js";
 import inboundMailRoutes from "./modules/comms/webhook.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
 import { authenticate, requireAuth } from "./middleware/auth.js";
+import billingRoutes from "./modules/billing/billing.routes.js";
+import stripeWebhook from "./modules/billing/stripe.webhook.js";
 import { impersonationGuard } from "./middleware/impersonation.js";
 import impersonationRoutes from "./modules/impersonation/impersonation.routes.js";
 import { getStorage } from "./integrations/storage/registry.js";
@@ -75,6 +77,9 @@ export function createApp() {
   const appCors = cors({ origin: env.clientOrigin, credentials: true });
   const isOpen = (p) => p.startsWith("/.well-known/") || ["/api/oauth/register", "/api/oauth/token", "/api/oauth/revoke", "/api/mcp"].includes(p);
   app.use((req, res, next) => (isOpen(req.path) ? openCors : appCors)(req, res, next));
+  // Stripe signs the exact bytes it sends, so this one webhook reads its body
+  // raw and must be mounted before express.json() below consumes it.
+  app.use("/api/webhooks/stripe", stripeWebhook);
   app.use(express.json({ limit: "1mb" }));
 
   // Runs on every request but rejects nothing; routes opt into requireAuth.
@@ -124,6 +129,8 @@ export function createApp() {
   // Called by the mail provider, not a user.
   app.use("/api/inbound", inboundMailRoutes);
   app.use("/api/oauth", oauthRoutes);
+  // The signed-in person's credits.
+  app.use("/api/billing", requireAuth, billingRoutes);
   app.use("/api/impersonation", requireAuth, impersonationRoutes);
   app.use("/api/api-keys", requireAuth, apiKeyRoutes);
   // The app as an MCP server. It authenticates with its own API key, not a session.

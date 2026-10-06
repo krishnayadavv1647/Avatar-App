@@ -22,6 +22,12 @@ const limiter = (windowMs, limit) =>
 const router = Router();
 
 router.get("/:token", limiter(60 * 1000, 60), validate(linkValidation.describe), linkController.describe);
+router.get(
+  "/:token/preview-image",
+  limiter(60 * 1000, 60),
+  validate(linkValidation.describe),
+  linkController.previewImage,
+);
 router.post(
   "/:token/calls",
   limiter(15 * 60 * 1000, 20),

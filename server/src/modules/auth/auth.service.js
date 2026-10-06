@@ -1,3 +1,4 @@
+import { ensureGrants } from "../billing/credit.service.js";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -145,6 +146,11 @@ async function createAccount({ email, passwordHash, googleId, name, workspaceNam
     ...(plan && { planId: plan._id, assignedAt: new Date() }),
     status: "active",
   });
+
+  // Welcome credits, or the default plan's, are there from the first screen.
+  await ensureGrants(workspace._id).catch((err) =>
+    logger.warn({ err: err.message, workspaceId: String(workspace._id) }, "could not grant starting credits"),
+  );
 
   return { user, workspace };
 }

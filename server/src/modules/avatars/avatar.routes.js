@@ -79,6 +79,7 @@ router.post(
 );
 
 // The short talking clip shown when hovering the avatar's card.
+router.get("/:id/preview-image", validate(avatarValidation.byId), avatarController.previewImage);
 router.post("/:id/preview-video", validate(avatarValidation.byId), avatarController.makePreview);
 
 export default router;

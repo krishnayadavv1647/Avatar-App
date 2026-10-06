@@ -3,7 +3,8 @@
  *
  * Priced from the running cost of a call: LemonSlice is about $0.164 a minute
  * (see avatar/capabilities.js) plus a few cents for speech and the language
- * model, so every paid plan works out above $0.24 a minute. Adjust freely once
+ * model, so every paid plan works out above $0.24 a minute. Credits are set at
+ * ten to a Standard minute: Starter's 1,000 credits are 100 minutes. Adjust freely once
  * added - they are ordinary plans. None is made the default, so adding them
  * changes nothing for new sign-ups until an admin chooses.
  */
@@ -13,8 +14,7 @@ export const PLAN_TEMPLATES = [
     name: "Free",
     description: "Try it out: one avatar and a few minutes a month.",
     priceCents: 0,
-    includedMinutes: 10,
-    overageEnabled: false,
+    monthlyCredits: 100,
     concurrencyLimit: 1,
     maxAvatars: 1,
   },
@@ -23,8 +23,7 @@ export const PLAN_TEMPLATES = [
     name: "Starter",
     description: "For individuals getting started.",
     priceCents: 2900,
-    includedMinutes: 100,
-    overageEnabled: false,
+    monthlyCredits: 1000,
     concurrencyLimit: 2,
     maxAvatars: 3,
   },
@@ -33,8 +32,7 @@ export const PLAN_TEMPLATES = [
     name: "Pro",
     description: "For teams running avatars every day.",
     priceCents: 9900,
-    includedMinutes: 400,
-    overageEnabled: true,
+    monthlyCredits: 4000,
     concurrencyLimit: 5,
     maxAvatars: 10,
   },
@@ -43,8 +41,7 @@ export const PLAN_TEMPLATES = [
     name: "Business",
     description: "For high-volume support and sales.",
     priceCents: 29900,
-    includedMinutes: 1200,
-    overageEnabled: true,
+    monthlyCredits: 12000,
     concurrencyLimit: 20,
     maxAvatars: 0,
   },

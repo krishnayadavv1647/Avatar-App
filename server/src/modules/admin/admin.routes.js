@@ -5,6 +5,7 @@ import { adminValidation } from "./admin.validation.js";
 import { validate } from "../../middleware/validate.js";
 import systemRoutes from "./system/system.routes.js";
 import commsRoutes from "./comms/comms.routes.js";
+import creditsRoutes from "./credits/credits.routes.js";
 import { requirePlatformAdmin } from "../../middleware/admin.js";
 
 // The plan thumbnail goes straight to the storage driver, never to disk here.
@@ -27,6 +28,7 @@ router.get("/stats", adminController.stats);
 // The panel's tabs, each in its own router.
 router.use(systemRoutes);
 router.use(commsRoutes);
+router.use(creditsRoutes);
 
 router.get("/overview", validate(adminValidation.overview), adminController.overview);
 

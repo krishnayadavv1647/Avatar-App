@@ -99,9 +99,9 @@ export default function InvitePage() {
                 <span className="font-medium">{invitation.plan?.name || "—"}</span>
                 {invitation.plan && (
                   <span className="ml-2 text-text-muted">
-                    {invitation.plan.includedMinutes > 0
-                      ? `${invitation.plan.includedMinutes.toLocaleString()} minutes a month`
-                      : "no monthly minute cap"}
+                    {invitation.plan.unlimited
+                      ? "unlimited credits"
+                      : `${invitation.plan.monthlyCredits.toLocaleString()} credits each month`}
                   </span>
                 )}
               </Row>

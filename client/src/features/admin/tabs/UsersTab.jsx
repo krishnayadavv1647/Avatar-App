@@ -244,9 +244,9 @@ export default function UsersTab() {
   );
 }
 
-/** One account: who they are, their badges, their minutes, and a menu. */
+/** One account: who they are, their badges, their credits, and a menu. */
 function UserRow({ user, onEdit, onDetails, onActAs, onDelete }) {
-  const minutes = allowance(user);
+  const credits = allowance(user);
   const initial = (user.name?.[0] || user.email[0]).toUpperCase();
 
   return (
@@ -283,8 +283,8 @@ function UserRow({ user, onEdit, onDetails, onActAs, onDelete }) {
 
       <div className="flex items-center gap-4">
         <div className="text-right text-ui">
-          <p className="font-bold">{minutes.total}</p>
-          <p className="text-label text-text-faint">{minutes.detail}</p>
+          <p className="font-bold">{credits.total}</p>
+          <p className="text-label text-text-faint">{credits.detail}</p>
           <p className="mt-1 text-text-muted">Joined {date(user.createdAt)}</p>
         </div>
         <RowMenu

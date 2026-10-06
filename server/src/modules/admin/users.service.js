@@ -1,3 +1,4 @@
+import { adjustCredits, getRates, planCredits } from "../billing/credit.service.js";
 import {
   ApiKey,
   Avatar,
@@ -48,8 +49,8 @@ const CSV_COLUMNS = [
   "Email",
   "Plan",
   "Status",
-  "Plan Minutes",
-  "Bonus Minutes",
+  "Plan Credits",
+  "Credits",
   "Source",
   "Organization",
   "Workspace",
@@ -114,8 +115,13 @@ export const usersService = {
       },
     );
     if (plan) await plansService.assign({ workspaceId: user.workspaceId, plan, assignedBy: admin._id });
-    if (fields.bonusMinutes) {
-      await Subscription.updateOne({ workspaceId: user.workspaceId }, { $set: { bonusMinutes: fields.bonusMinutes } });
+    if (fields.startingCredits) {
+      await adjustCredits({
+        workspaceId: user.workspaceId,
+        credits: fields.startingCredits,
+        note: "Starting credits from an admin",
+        actorId: admin._id,
+      });
     }
 
     await audit({
@@ -123,7 +129,7 @@ export const usersService = {
       admin,
       action: "admin.user.create",
       target: { kind: "user", id: user.id },
-      meta: { role, status, plan: plan?.key || null, bonusMinutes: fields.bonusMinutes || 0 },
+      meta: { role, status, plan: plan?.key || null, startingCredits: fields.startingCredits || 0 },
       ip,
     });
     logger.info({ userId: user.id, by: String(admin._id) }, "user created by admin");
@@ -131,7 +137,7 @@ export const usersService = {
   },
 
   /**
-   * Applies an Edit User save: profile, role, bonus minutes, plan, and status.
+   * Applies an Edit User save: profile, role, plan, and status.
    * Status goes last because suspending signs the person out and ends their
    * calls - not something to do before the rest has been accepted.
    *
@@ -161,11 +167,11 @@ export const usersService = {
     if (suspended && !user.blockedAt && self) throw fail(422, "You cannot suspend yourself.");
 
     const subscription = user.workspaceId
-      ? await Subscription.findOne({ workspaceId: user.workspaceId }).select("planId bonusMinutes").lean()
+      ? await Subscription.findOne({ workspaceId: user.workspaceId }).select("planId").lean()
       : null;
     const changesPlan = fields.planId !== undefined && String(subscription?.planId || "") !== fields.planId;
     const plan = changesPlan ? await assignablePlan(fields.planId) : null;
-    if ((changesPlan || fields.bonusMinutes !== undefined) && !user.workspaceId) {
+    if (changesPlan && !user.workspaceId) {
       throw fail(422, "This user has no workspace to put on a plan.");
     }
 
@@ -182,15 +188,6 @@ export const usersService = {
       changes.role = { from: wasAdmin ? "admin" : "user", to: becomesAdmin ? "admin" : "user" };
     }
     if (Object.keys(profile).length) await User.updateOne({ _id: user._id }, { $set: profile });
-
-    if (fields.bonusMinutes !== undefined && fields.bonusMinutes !== (subscription?.bonusMinutes || 0)) {
-      await Subscription.updateOne(
-        { workspaceId: user.workspaceId },
-        { $set: { bonusMinutes: fields.bonusMinutes } },
-        { upsert: true },
-      );
-      changes.bonusMinutes = { from: subscription?.bonusMinutes || 0, to: fields.bonusMinutes };
-    }
 
     if (plan) await assignPlanTo(id, fields.planId, { admin, ip });
 
@@ -216,7 +213,7 @@ export const usersService = {
     const row = await userRowById(id);
     return {
       user: row,
-      planEmail: plan ? await sendPlanUpdate(user, plan, row.bonusMinutes) : "skipped",
+      planEmail: plan ? await sendPlanUpdate(user, plan) : "skipped",
     };
   },
 
@@ -296,8 +293,8 @@ export const usersService = {
             u.email,
             u.plan || "No Plan",
             u.status,
-            u.planMinutes,
-            u.bonusMinutes,
+            u.unlimited ? "unlimited" : u.planCredits,
+            u.unlimited ? "unlimited" : u.credits,
             u.source,
             u.organization || "N/A",
             u.workspace?.name || "N/A",
@@ -320,13 +317,13 @@ export const usersService = {
 };
 
 /** Tells the user their plan changed. Mail being unconfigured is not an error worth showing. */
-async function sendPlanUpdate(user, plan, bonusMinutes) {
+async function sendPlanUpdate(user, plan) {
   const fresh = await User.findById(user._id).select("name email").lean();
   const message = planUpdateEmail({
     name: fresh?.name,
     planName: plan.name,
-    planMinutes: plan.includedMinutes ?? 0,
-    bonusMinutes,
+    planCredits: planCredits(plan, await getRates()),
+    unlimited: Boolean(plan.unlimitedCredits),
   });
   const result = await sendEmail({ to: user.email, ...message });
   if (result.ok) return "sent";

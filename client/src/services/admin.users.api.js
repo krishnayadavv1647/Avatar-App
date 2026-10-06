@@ -23,6 +23,13 @@ export const adminUsersApi = {
   /** `{ user, planEmail: "sent" | "failed" | "skipped" }` */
   update: (id, fields) => api.patch(`/admin/users/${id}`, fields),
   remove: (id) => api.del(`/admin/users/${id}`),
+
+  /** One user's credit summary (balance, what it buys, plan) plus their recent ledger. */
+  credits: (id) => api.get(`/admin/users/${id}/credits`),
+  /** Adds (positive) or removes (negative) credits, with the reason on record. Returns `{ balance }`. */
+  adjustCredits: (id, { credits, note }) => api.post(`/admin/users/${id}/credits`, { credits, note }),
+  /** Credits per minute for each render model, for showing what credits buy. */
+  creditRates: () => api.get("/admin/credits/settings").then((r) => r.rates),
   /** `{ accessToken, user, expiresAt, blocked }` - an hour of acting as that user. */
   impersonate: (id) => api.post(`/admin/users/${id}/impersonate`),
 

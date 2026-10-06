@@ -72,15 +72,17 @@ export function emailShell({ heading, intro, facts = [], button, note }) {
 }
 
 /** Sent when an admin moves someone to a different plan. */
-export function planUpdateEmail({ name, planName, planMinutes, bonusMinutes }) {
+export function planUpdateEmail({ name, planName, planCredits, unlimited }) {
   const brand = brandName();
   const shell = emailShell({
     heading: "Your plan has been updated",
     intro: `Hi ${name || "there"}, your ${brand} account has been updated by our team. Everything below is live on your account now.`,
     facts: [
       { label: "Plan", value: planName },
-      { label: "Included minutes", value: planMinutes > 0 ? `${planMinutes} per month` : "No monthly cap" },
-      ...(bonusMinutes > 0 ? [{ label: "Bonus minutes", value: String(bonusMinutes) }] : []),
+      {
+        label: "Credits",
+        value: unlimited ? "Unlimited" : planCredits > 0 ? `${planCredits} each month` : "None included",
+      },
     ],
     button: { href: webOrigin(), label: `Open ${brand}` },
   });
