@@ -220,7 +220,7 @@ export const PRESETS = [
     accent: "yellow",
     gender: "male",
     portrait:
-      "an athletic upbeat man in his early thirties, a personal trainer, fitted sports polo, " +
+      "an athletic upbeat man in his early thirties, a personal trainer, fitted plain unbranded sports polo with no logo, " +
       "big motivating grin, bright modern gym softly blurred behind him",
     systemPrompt:
       "You are an upbeat fitness coach. Ask about the person's goal and how much time they have, then give " +
