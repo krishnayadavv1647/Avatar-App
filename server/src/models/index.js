@@ -14,3 +14,4 @@ export { Plan } from "./Plan.js";
 export { AuditLog } from "./AuditLog.js";
 export { McpServer } from "./McpServer.js";
 export { ApiKey } from "./ApiKey.js";
+export { OAuthClient, OAuthCode, OAuthToken } from "./OAuth.js";

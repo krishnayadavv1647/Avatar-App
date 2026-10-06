@@ -18,6 +18,7 @@ import conversationRoutes from "./modules/conversations/conversation.routes.js";
 import linkRoutes from "./modules/links/link.routes.js";
 import apiKeyRoutes from "./modules/apiKeys/apiKey.routes.js";
 import mcpRoutes from "./modules/mcp/mcp.routes.js";
+import oauthRoutes, { wellKnownRoutes } from "./modules/oauth/oauth.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
 import { authenticate, requireAuth } from "./middleware/auth.js";
 import { getStorage } from "./integrations/storage/registry.js";
@@ -63,7 +64,11 @@ export function createApp() {
     if (!req.path.startsWith("/embed/")) res.setHeader("X-Frame-Options", "SAMEORIGIN");
     return pageHeaders(req, res, next);
   });
-  app.use(cors({ origin: env.clientOrigin, credentials: true }));
+  // Connectors are other sites and call these without our cookies or origin.
+  const openCors = cors();
+  const appCors = cors({ origin: env.clientOrigin, credentials: true });
+  const isOpen = (p) => p.startsWith("/.well-known/") || ["/api/oauth/register", "/api/oauth/token", "/api/oauth/revoke", "/api/mcp"].includes(p);
+  app.use((req, res, next) => (isOpen(req.path) ? openCors : appCors)(req, res, next));
   app.use(express.json({ limit: "1mb" }));
 
   // Runs on every request but rejects nothing; routes opt into requireAuth.
@@ -102,6 +107,8 @@ export function createApp() {
   app.use("/api/voices", requireAuth, voiceRoutes);
   app.use("/api/analytics", requireAuth, analyticsRoutes);
   app.use("/api/conversations", requireAuth, conversationRoutes);
+  app.use("/.well-known", wellKnownRoutes);
+  app.use("/api/oauth", oauthRoutes);
   app.use("/api/api-keys", requireAuth, apiKeyRoutes);
   // The app as an MCP server. It authenticates with its own API key, not a session.
   app.use("/api/mcp", mcpRoutes);

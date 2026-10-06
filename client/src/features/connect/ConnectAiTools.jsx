@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiKeyApi } from "@/services/apiKey.api";
+import { apiKeyApi, connectionApi } from "@/services/apiKey.api";
 import PageHeader from "@/components/layout/PageHeader";
 import Card from "@/components/common/Card";
 import Button from "@/components/common/Button";
 import Field from "@/components/forms/Field";
 
 /**
- * "AI tools": make a key, then point Claude, Cursor or another MCP client at
- * this app so it can create and manage avatars on your behalf.
+ * "AI tools": connect Claude, ChatGPT, Cursor or another MCP client so it can
+ * create and manage avatars on your behalf.
  *
- * The key is shown once, right after it is made - only a hash is stored.
+ * Claude.ai and ChatGPT sign in through OAuth (just the address below); tools
+ * that read a config file use a key instead. A key is shown once, right after
+ * it is made - only a hash is stored.
  */
 const MCP_URL = `${window.location.origin}/api/mcp`;
 const isLocal = /^(localhost|127\.|\[::1\])/.test(window.location.hostname);
@@ -33,6 +35,12 @@ export default function ConnectAiTools() {
   });
   const revoke = useMutation({ mutationFn: apiKeyApi.revoke, onSuccess: refresh });
 
+  const { data: connections = [] } = useQuery({ queryKey: ["oauth-connections"], queryFn: connectionApi.list });
+  const disconnect = useMutation({
+    mutationFn: connectionApi.disconnect,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["oauth-connections"] }),
+  });
+
   const keyText = fresh?.key || "YOUR_KEY";
 
   return (
@@ -42,7 +50,62 @@ export default function ConnectAiTools() {
         description="Let Claude, Cursor or any MCP client create and manage your avatars. Just ask it in plain words."
       />
 
-      <Card title="1. Make a key">
+      <Card title="Claude.ai and ChatGPT">
+        {isLocal && (
+          <p className="mt-3 text-ui text-text-muted">
+            This app is running on your own computer, which Claude.ai and ChatGPT cannot reach. Deploy it first, then
+            come back to this page on the live address.
+          </p>
+        )}
+        <Step title="Server address">
+          <CopyBox text={MCP_URL} />
+        </Step>
+        <ul className="mt-4 list-disc space-y-1.5 pl-5 text-ui text-text-muted">
+          <li>
+            <span className="font-medium text-text">Claude.ai:</span> Settings → Connectors → Add custom connector →
+            paste the address → Connect.
+          </li>
+          <li>
+            <span className="font-medium text-text">ChatGPT:</span> Settings → Connectors → Advanced → turn on
+            Developer mode → Create → paste the address, choose OAuth → Create.
+          </li>
+        </ul>
+        <p className="mt-3 text-ui text-text-faint">
+          You will be sent here to sign in and allow it. Menu names change now and then; look for custom or MCP
+          connectors.
+        </p>
+
+        {connections.length > 0 && (
+          <ul className="mt-4 divide-y divide-border rounded-lg border border-border bg-bg">
+            {connections.map((c) => (
+              <li key={c._id} className="flex items-center gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-ui font-medium">{c.name}</p>
+                  <p className="text-label text-text-faint">
+                    connected {new Date(c.connectedAt).toLocaleDateString()} ·{" "}
+                    {c.lastUsedAt ? `used ${new Date(c.lastUsedAt).toLocaleDateString()}` : "not used yet"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => disconnect.mutate(c._id)}
+                  disabled={disconnect.isPending && disconnect.variables === c._id}
+                  className="h-8 shrink-0 rounded-sm px-3 text-ui text-text-muted transition-colors hover:bg-surface-hover hover:text-red disabled:opacity-40"
+                >
+                  Disconnect
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card title="Other tools: use a key" className="mt-4">
+        <p className="mt-3 text-ui text-text-muted">
+          For Claude Code, Claude Desktop and Cursor, which read a config file. Make a key, then paste it into the
+          snippet below.
+        </p>
+
         <form
           className="mt-4 flex items-end gap-3"
           onSubmit={(e) => {
@@ -90,14 +153,7 @@ export default function ConnectAiTools() {
         )}
       </Card>
 
-      <Card title="2. Connect your AI tool" className="mt-4">
-        {isLocal && (
-          <p className="mt-3 text-ui text-text-muted">
-            This app is running on your own computer, so only tools on this computer can reach it (Claude Code,
-            Claude Desktop, Cursor). Deploy it to use a tool that runs elsewhere.
-          </p>
-        )}
-
+      <Card title="Paste into your tool" className="mt-4">
         <Step title="Claude Code">
           <CopyBox
             text={`claude mcp add --transport http avatar-studio ${MCP_URL} --header "Authorization: Bearer ${keyText}"`}
@@ -122,13 +178,9 @@ export default function ConnectAiTools() {
           />
         </Step>
 
-        <p className="mt-5 text-ui text-text-faint">
-          Claude.ai's web connectors and ChatGPT sign in with OAuth, which this app does not offer yet, so they cannot
-          connect for now.
-        </p>
       </Card>
 
-      <Card title="3. Ask for things" className="mt-4">
+      <Card title="Then ask for things" className="mt-4">
         <ul className="mt-3 list-disc space-y-1.5 pl-5 text-ui text-text-muted">
           <li>"Create an avatar called Maya with a friendly sales greeting."</li>
           <li>"Make a support avatar from this photo: https://…/portrait.jpg"</li>

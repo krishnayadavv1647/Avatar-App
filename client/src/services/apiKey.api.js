@@ -6,3 +6,13 @@ export const apiKeyApi = {
   create: (name) => api.post("/api-keys", { name }).then((r) => r.key),
   revoke: (id) => api.del(`/api-keys/${id}`),
 };
+
+/** Apps connected through "Connect" in Claude, ChatGPT and similar. */
+export const connectionApi = {
+  list: () => api.get("/oauth/connections").then((r) => r.connections),
+  disconnect: (id) => api.del(`/oauth/connections/${id}`),
+  /** Who is asking, for the permission screen. `params` is the authorize query. */
+  describe: (params) => api.get(`/oauth/authorize?${new URLSearchParams(params)}`),
+  /** The answer; resolves to `{ redirectTo }`. */
+  decide: (params, allow) => api.post("/oauth/authorize", { ...params, allow }),
+};

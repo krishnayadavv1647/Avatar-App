@@ -2,6 +2,7 @@ import { Router } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { apiKeyService } from "../apiKeys/apiKey.service.js";
+import { metadata, oauthService } from "../oauth/oauth.service.js";
 import { createAvatarMcpServer } from "./mcp.tools.js";
 import { Workspace } from "../../models/index.js";
 import { logger } from "../../config/logger.js";
@@ -9,8 +10,8 @@ import { logger } from "../../config/logger.js";
 /**
  * POST /api/mcp - the app as an MCP server (streamable HTTP, stateless).
  *
- * Authenticated by a personal key (`Authorization: Bearer avt_...`) made on the
- * "AI tools" page. Stateless: every request builds its own server and
+ * Authenticated by a personal key (`Bearer avt_...`, made on the "AI tools"
+ * page) or by an OAuth access token (`Bearer avo_...`, from "Connect"). Stateless: every request builds its own server and
  * transport, so nothing is held between calls and any instance can answer.
  */
 const router = Router();
@@ -31,9 +32,12 @@ const rpcError = (res, status, message) =>
 
 router.post("/", async (req, res) => {
   const [scheme, token] = (req.headers.authorization || "").split(" ");
-  const who = scheme?.toLowerCase() === "bearer" ? await apiKeyService.authenticate(token) : null;
+  const bearer = scheme?.toLowerCase() === "bearer" ? token : null;
+  // A personal key (pasted into a config) or an OAuth token (from "Connect").
+  const who = bearer ? (await apiKeyService.authenticate(bearer)) || (await oauthService.authenticateAccess(bearer)) : null;
   if (!who) {
-    res.setHeader("WWW-Authenticate", 'Bearer realm="avatar-studio"');
+    // Tells a connector where to start signing in (RFC 9728).
+    res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${metadata.resourceMetadataUrl()}"`);
     return rpcError(res, 401, "Missing or invalid API key");
   }
 

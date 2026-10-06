@@ -16,6 +16,11 @@ export default defineConfig({
         target: process.env.VITE_SERVER_ORIGIN || "http://localhost:4000",
         changeOrigin: true,
       },
+      // OAuth discovery for MCP connectors lives at the site root.
+      "/.well-known": {
+        target: process.env.VITE_SERVER_ORIGIN || "http://localhost:4000",
+        changeOrigin: true,
+      },
     },
   },
 });
