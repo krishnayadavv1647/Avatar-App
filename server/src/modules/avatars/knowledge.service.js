@@ -69,6 +69,29 @@ export const knowledgeService = {
     return summary(doc);
   },
 
+  /**
+   * Saves text as a document. A document with the same name is replaced, so a
+   * customer's changed details can be pushed again without piling up copies.
+   * @returns {Promise<{ document: object, replaced: boolean }>}
+   */
+  async saveText(workspaceId, avatarId, { name, content }, userId) {
+    await assertAvatar(workspaceId, avatarId);
+    const { text, truncated } = await extractText({ buffer: Buffer.from(content, "utf8"), originalname: "text.txt" });
+
+    const existing = await KnowledgeDocument.findOne({ workspaceId, avatarId, name }).select("_id");
+    if (!existing && (await KnowledgeDocument.countDocuments({ workspaceId, avatarId })) >= MAX_DOCS) {
+      const err = new Error(`An avatar can hold ${MAX_DOCS} documents. Remove one first.`);
+      err.statusCode = 422;
+      throw err;
+    }
+
+    const fields = { mime: "text/plain", bytes: Buffer.byteLength(content), text, chars: text.length, truncated, uploadedBy: userId };
+    const doc = existing
+      ? await KnowledgeDocument.findByIdAndUpdate(existing._id, fields, { new: true })
+      : await KnowledgeDocument.create({ workspaceId, avatarId, name, ...fields });
+    return { document: summary(doc), replaced: Boolean(existing) };
+  },
+
   async remove(workspaceId, avatarId, docId) {
     await assertAvatar(workspaceId, avatarId);
     const deleted = await KnowledgeDocument.findOneAndDelete({ _id: docId, workspaceId, avatarId });

@@ -31,3 +31,7 @@ process.env.RESEND_API_KEY = "";
 // A made-up client id; tests/integration/google-auth.test.js signs its own
 // tokens for it with a key it pretends Google published.
 process.env.GOOGLE_CLIENT_ID = "test-client.apps.googleusercontent.com";
+
+// Likewise no real image or chat calls (and no spend) from a run: tests that
+// need the Kie.ai key set one on `env.kie` themselves.
+process.env.KIE_API_KEY = "";

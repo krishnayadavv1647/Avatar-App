@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import multer from "multer";
 import { MAX_FILE_BYTES } from "../../ai/knowledge.js";
 import { avatarController } from "./avatar.controller.js";
@@ -18,6 +19,16 @@ const uploadImage = multer({
   limits: { fileSize: 10 * 1024 * 1024, files: 1 },
 });
 
+// Reading a site and asking the AI service costs real money, so it is bounded per person.
+const learnLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => String(req.auth?.userId || ipKeyGenerator(req.ip)),
+  message: { error: { message: "You have learned a lot of websites this hour. Try again later." } },
+});
+
 const router = Router();
 
 router.use(resolveWorkspace);
@@ -34,6 +45,12 @@ router.post(
   validate(avatarValidation.byId),
   uploadDocument.single("file"),
   avatarController.addDocument,
+);
+router.post(
+  "/:id/website",
+  learnLimiter,
+  validate(avatarValidation.learnWebsite),
+  avatarController.learnWebsite,
 );
 router.delete(
   "/:id/documents/:docId",

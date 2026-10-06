@@ -12,6 +12,7 @@
     "validate": "node src/scripts/validate-models.js",
     "test": "node --test --test-concurrency=1 \"tests/**/*.test.js\"",
     "seed": "node src/scripts/seed.js",
+    "presets": "node src/scripts/generate-presets.js",
     "dev:standalone": "node src/scripts/dev-standalone.js",
     "check": "node src/scripts/check-credentials.js",
     "check:avatars": "node src/scripts/check-avatars.js",

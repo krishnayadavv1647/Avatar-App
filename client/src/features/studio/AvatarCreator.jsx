@@ -161,6 +161,34 @@ export default function AvatarCreator() {
     setSelectedId(item.id);
   };
 
+  // A template brings its own face: that exact picture goes on the canvas as a
+  // photo, so the avatar made is the one the card showed. If it is not there
+  // (not generated yet, offline) the library's own faces are used as before.
+  const presetLoaded = useRef(null);
+  useEffect(() => {
+    if (!preset?.image || presetLoaded.current === preset.id) return undefined;
+    presetLoaded.current = preset.id;
+    let stopped = false;
+    fetch(preset.image)
+      .then((res) => (res.ok && res.headers.get("content-type")?.startsWith("image/") ? res.blob() : Promise.reject(new Error("no picture"))))
+      .then((blob) => {
+        if (stopped) return;
+        const file = new File([blob], `${preset.id}.jpg`, { type: blob.type });
+        const url = URL.createObjectURL(file);
+        urls.current.push(url);
+        setGender(preset.gender);
+        setUploads((items) => [{ id: url, kind: "upload", file, url, label: preset.label, gender: preset.gender }, ...items]);
+        setSelectedId(url);
+      })
+      .catch(() => {
+        presetLoaded.current = null;
+      });
+    return () => {
+      stopped = true;
+      presetLoaded.current = null;
+    };
+  }, [preset]);
+
   const choose = () => fileInput.current?.click();
 
   // ---- picture tools --------------------------------------------------------

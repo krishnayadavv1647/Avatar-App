@@ -42,6 +42,14 @@ export const avatarValidation = {
       })
       .strict(),
   },
+  learnWebsite: {
+    params: z.object({ id: objectId }),
+    body: z.object({
+      url: z.string().trim().min(3, "Enter the website's address").max(2000),
+      // Also write the avatar's instructions and greeting from the site.
+      applyBrief: z.boolean().optional(),
+    }),
+  },
   document: { params: z.object({ id: objectId, docId: objectId }) },
   mcpServer: { params: z.object({ id: objectId, serverId: objectId }) },
   addMcpServer: {

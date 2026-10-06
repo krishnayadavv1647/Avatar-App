@@ -14,6 +14,8 @@ export const avatarApi = {
     form.append("file", file);
     return api.upload(`/avatars/${id}/documents`, form).then((r) => r.document);
   },
+  /** Reads a website and teaches the avatar about it; takes up to a minute. */
+  learnWebsite: (id, { url, applyBrief }) => api.post(`/avatars/${id}/website`, { url, applyBrief }),
   removeDocument: (id, docId) => api.del(`/avatars/${id}/documents/${docId}`),
 
   /** MCP servers: `{ _id, name, url, enabled, toolNames }`. The token is write-only. */

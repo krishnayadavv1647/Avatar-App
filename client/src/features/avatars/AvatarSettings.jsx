@@ -212,7 +212,11 @@ export default function AvatarSettings({ avatar, options, onChange }) {
               ))}
             </Select>
           </Row>
-          <KnowledgeBase avatarId={avatar._id} />
+          <KnowledgeBase
+            avatarId={avatar._id}
+            // The server already saved these; only the form's own copy needs to follow.
+            onBrief={(brief) => setDraft((d) => ({ ...d, persona: { ...d.persona, ...brief } }))}
+          />
           <McpServers avatarId={avatar._id} />
         </Card>
       </section>

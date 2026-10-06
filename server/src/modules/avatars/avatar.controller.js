@@ -1,5 +1,6 @@
 import { avatarService } from "./avatar.service.js";
 import { knowledgeService } from "./knowledge.service.js";
+import { websiteService } from "./website.service.js";
 import { mcpService } from "./mcp.service.js";
 import { previewService } from "./preview.service.js";
 import { previewImageService } from "./previewImage.service.js";
@@ -36,6 +37,12 @@ export const avatarController = {
       req.auth?.userId,
     );
     res.status(201).json({ document });
+  }),
+
+  learnWebsite: asyncHandler(async (req, res) => {
+    res.status(201).json(
+      await websiteService.learn(req.workspace._id, req.params.id, req.body, req.auth?.userId),
+    );
   }),
 
   removeDocument: asyncHandler(async (req, res) => {

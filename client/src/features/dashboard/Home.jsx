@@ -303,8 +303,8 @@ function CardAction({ tone, icon, label, detail }) {
 }
 
 function TemplateCard({ preset, onPick }) {
-  // The photo comes from Unsplash's CDN; if it cannot load (offline, blocked),
-  // the card falls back to the accent-tinted icon it always had.
+  // The face is a generated picture in /public/presets; until it has been made
+  // (or if it cannot load) the card falls back to its accent-tinted icon.
   const [photoFailed, setPhotoFailed] = useState(false);
   const art = {
     background: [

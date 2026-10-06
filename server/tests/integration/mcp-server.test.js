@@ -100,7 +100,7 @@ describe("/api/mcp", () => {
     const client = await connect(key);
     const res = await call(client, "create_avatar", { name: "No face" });
     assert.equal(res.isError, true);
-    assert.match(res.data, /faceId or photoUrl/);
+    assert.match(res.data, /faceId, photoUrl or facePrompt/);
     await client.close();
   });
 
