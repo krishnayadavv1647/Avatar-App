@@ -63,6 +63,11 @@ export const env = {
     refreshTtl: optional("JWT_REFRESH_TTL", "30d"),
   },
 
+  // Encrypts the auth tokens saved for MCP servers. Falls back to the refresh
+  // secret so an install that already has one needs no new variable; the API
+  // and the agent worker must both see the same value to read a saved token.
+  mcpEncryptionKey: optional("MCP_ENCRYPTION_KEY") || optional("JWT_REFRESH_SECRET"),
+
   // "Continue with Google". The OAuth Web client id from Google Cloud Console;
   // the browser asks for it at /api/auth/config. Unset hides the button.
   google: {

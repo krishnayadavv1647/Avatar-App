@@ -43,6 +43,19 @@ export const avatarValidation = {
       .strict(),
   },
   document: { params: z.object({ id: objectId, docId: objectId }) },
+  mcpServer: { params: z.object({ id: objectId, serverId: objectId }) },
+  addMcpServer: {
+    params: z.object({ id: objectId }),
+    body: z.object({
+      name: z.string().trim().min(1, "Give the server a name").max(40),
+      url: z.string().trim().url("Enter the MCP server's URL").max(2000),
+      authToken: z.string().trim().max(4000).optional(),
+    }),
+  },
+  setMcpServerEnabled: {
+    params: z.object({ id: objectId, serverId: objectId }),
+    body: z.object({ enabled: z.boolean() }),
+  },
   joinMeeting: {
     params: z.object({ id: objectId }),
     body: z.object({

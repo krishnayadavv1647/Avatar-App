@@ -1,5 +1,6 @@
 import { avatarService } from "./avatar.service.js";
 import { knowledgeService } from "./knowledge.service.js";
+import { mcpService } from "./mcp.service.js";
 import { previewService } from "./preview.service.js";
 import { studioService } from "../studio/studio.service.js";
 import { roomService } from "../rooms/room.service.js";
@@ -38,6 +39,29 @@ export const avatarController = {
 
   removeDocument: asyncHandler(async (req, res) => {
     res.json(await knowledgeService.remove(req.workspace._id, req.params.id, req.params.docId));
+  }),
+
+  listMcpServers: asyncHandler(async (req, res) => {
+    res.json({ servers: await mcpService.list(req.workspace._id, req.params.id) });
+  }),
+
+  addMcpServer: asyncHandler(async (req, res) => {
+    const server = await mcpService.add(req.workspace._id, req.params.id, req.body, req.auth?.userId);
+    res.status(201).json({ server });
+  }),
+
+  setMcpServerEnabled: asyncHandler(async (req, res) => {
+    const server = await mcpService.setEnabled(
+      req.workspace._id,
+      req.params.id,
+      req.params.serverId,
+      req.body.enabled,
+    );
+    res.json({ server });
+  }),
+
+  removeMcpServer: asyncHandler(async (req, res) => {
+    res.json(await mcpService.remove(req.workspace._id, req.params.id, req.params.serverId));
   }),
 
   getShare: asyncHandler(async (req, res) => {

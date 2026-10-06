@@ -13,6 +13,8 @@ import { createTranscriptRecorder } from "./transcript.recorder.js";
 import { RECOMMENDED_PROMPT } from "../ai/prompts/personality.js";
 import { knowledgePrompt } from "../ai/knowledge.js";
 import { knowledgeService } from "../modules/avatars/knowledge.service.js";
+import { mcpService } from "../modules/avatars/mcp.service.js";
+import { connectMcpTools } from "../integrations/mcp/index.js";
 import { preflight } from "./preflight.js";
 import { isPreviewRoom, runPreview } from "./preview.job.js";
 
@@ -62,6 +64,7 @@ export default defineAgent({
 
     let session = null;
     let transcript = null;
+    let mcp = null;
     let endReason = "room closed";
     let failed = false;
 
@@ -82,6 +85,7 @@ export default defineAgent({
       finished = true;
       clearTimeout(limitTimer);
       await transcript?.flush();
+      await mcp?.close();
       await renderer.stop().catch((err) => logger.warn({ err: err.message }, "renderer stop failed"));
       await roomService
         .finish(conversation._id, { endReason, ...(failed && { status: "failed" }) })
@@ -214,9 +218,17 @@ export default defineAgent({
       await closeRoom();
     });
 
+    // The avatar's MCP servers, connected per call. A dead one is skipped
+    // rather than blocking the call.
+    const servers = await mcpService.forCall(avatar._id).catch(() => []);
+    if (servers.length) mcp = await connectMcpTools(servers);
+
     try {
       await session.start({
-        agent: new voice.Agent({ instructions: instructionsFor(avatar, conversation) }),
+        agent: new voice.Agent({
+          instructions: instructionsFor(avatar, conversation),
+          ...(mcp?.tools.length && { tools: mcp.tools }),
+        }),
         room: ctx.room,
         // In a meeting, audio comes from and goes to the meeting, not our room.
         ...(meetingUrl && renderer.roomOptions()),

@@ -16,6 +16,13 @@ export const avatarApi = {
   },
   removeDocument: (id, docId) => api.del(`/avatars/${id}/documents/${docId}`),
 
+  /** MCP servers: `{ _id, name, url, enabled, toolNames }`. The token is write-only. */
+  mcpServers: (id) => api.get(`/avatars/${id}/mcp-servers`).then((r) => r.servers),
+  addMcpServer: (id, body) => api.post(`/avatars/${id}/mcp-servers`, body).then((r) => r.server),
+  setMcpServerEnabled: (id, serverId, enabled) =>
+    api.patch(`/avatars/${id}/mcp-servers/${serverId}`, { enabled }).then((r) => r.server),
+  removeMcpServer: (id, serverId) => api.del(`/avatars/${id}/mcp-servers/${serverId}`),
+
   /** Public share link: `{ enabled, token }`. */
   getShare: (id) => api.get(`/avatars/${id}/share`).then((r) => r.share),
   setShare: (id, enabled) => api.put(`/avatars/${id}/share`, { enabled }).then((r) => r.share),

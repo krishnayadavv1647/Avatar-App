@@ -41,6 +41,20 @@ router.delete(
   avatarController.removeDocument,
 );
 
+// MCP servers: external tools the avatar can use during calls.
+router.get("/:id/mcp-servers", validate(avatarValidation.byId), avatarController.listMcpServers);
+router.post("/:id/mcp-servers", validate(avatarValidation.addMcpServer), avatarController.addMcpServer);
+router.patch(
+  "/:id/mcp-servers/:serverId",
+  validate(avatarValidation.setMcpServerEnabled),
+  avatarController.setMcpServerEnabled,
+);
+router.delete(
+  "/:id/mcp-servers/:serverId",
+  validate(avatarValidation.mcpServer),
+  avatarController.removeMcpServer,
+);
+
 // The public link. Managing it needs an account; using it does not - see
 // modules/links.
 router.get("/:id/share", validate(avatarValidation.byId), avatarController.getShare);

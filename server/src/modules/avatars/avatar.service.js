@@ -1,3 +1,4 @@
+import { mcpService } from "./mcp.service.js";
 import crypto from "node:crypto";
 import { avatarRepository } from "./avatar.repository.js";
 import { CAPABILITIES, isDevelopmentOnly } from "../../avatar/capabilities.js";
@@ -121,6 +122,7 @@ export const avatarService = {
     const deleted = await avatarRepository.deleteById(workspaceId, id);
     if (!deleted) throw notFound();
     await knowledgeService.removeAllFor(workspaceId, id);
+    await mcpService.removeAllFor(workspaceId, id);
     // The vendor-side avatar is deleted by a queue worker so a slow or failing
     // vendor never blocks the request. Wired up in Phase 2.
     return { id };

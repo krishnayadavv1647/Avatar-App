@@ -2,6 +2,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import MediaPreview from "@/components/media/MediaPreview";
 import KnowledgeBase from "./KnowledgeBase";
+import McpServers from "./McpServers";
 import CustomVoices, { useCustomVoices } from "./CustomVoices";
 import EditVisualsDialog from "./EditVisualsDialog";
 
@@ -212,6 +213,7 @@ export default function AvatarSettings({ avatar, options, onChange }) {
             </Select>
           </Row>
           <KnowledgeBase avatarId={avatar._id} />
+          <McpServers avatarId={avatar._id} />
         </Card>
       </section>
 
