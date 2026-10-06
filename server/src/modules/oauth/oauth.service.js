@@ -18,7 +18,11 @@ export const ACCESS_PREFIX = "avo_";
 
 const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const random = (bytes = 32) => crypto.randomBytes(bytes).toString("base64url");
-const origin = () => env.clientOrigin.replace(/\/$/, "");
+const trim = (u) => u.replace(/\/$/, "");
+/** Where the API answers: the issuer, token endpoint and the MCP resource. */
+const apiOrigin = () => trim(env.publicUrl || env.clientOrigin);
+/** Where the web app answers: only the sign-in and consent page lives here. */
+const appOrigin = () => trim(env.clientOrigin);
 
 /** `invalid_*` follows RFC 6749 so clients can read the error code. */
 const oauthError = (error, description, statusCode = 400) =>
@@ -44,11 +48,11 @@ function validRedirectUri(raw) {
 
 export const metadata = {
   authorizationServer: () => ({
-    issuer: origin(),
-    authorization_endpoint: `${origin()}/oauth/authorize`,
-    token_endpoint: `${origin()}/api/oauth/token`,
-    registration_endpoint: `${origin()}/api/oauth/register`,
-    revocation_endpoint: `${origin()}/api/oauth/revoke`,
+    issuer: apiOrigin(),
+    authorization_endpoint: `${appOrigin()}/oauth/authorize`,
+    token_endpoint: `${apiOrigin()}/api/oauth/token`,
+    registration_endpoint: `${apiOrigin()}/api/oauth/register`,
+    revocation_endpoint: `${apiOrigin()}/api/oauth/revoke`,
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
@@ -56,14 +60,14 @@ export const metadata = {
     scopes_supported: [SCOPE],
   }),
   protectedResource: () => ({
-    resource: `${origin()}/api/mcp`,
-    authorization_servers: [origin()],
+    resource: `${apiOrigin()}/api/mcp`,
+    authorization_servers: [apiOrigin()],
     scopes_supported: [SCOPE],
     bearer_methods_supported: ["header"],
     resource_name: "Avatar Studio",
   }),
   /** Where a 401 from /api/mcp points clients at, per RFC 9728. */
-  resourceMetadataUrl: () => `${origin()}/.well-known/oauth-protected-resource/api/mcp`,
+  resourceMetadataUrl: () => `${apiOrigin()}/.well-known/oauth-protected-resource/api/mcp`,
 };
 
 async function clientFor(clientId) {
@@ -154,7 +158,7 @@ export const oauthService = {
     const { client } = await this.describeRequest(params);
     const target = new URL(params.redirect_uri);
     if (params.state) target.searchParams.set("state", params.state);
-    target.searchParams.set("iss", origin());
+    target.searchParams.set("iss", apiOrigin());
 
     if (!allow) {
       target.searchParams.set("error", "access_denied");

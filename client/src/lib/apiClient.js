@@ -2,6 +2,9 @@ import { useAuth } from "@/store/auth.store";
 
 const BASE = import.meta.env.VITE_API_BASE || "/api";
 
+/** The API's full address, even when BASE is a relative path. */
+export const apiUrl = (path) => new URL(`${BASE}${path}`, window.location.href).href;
+
 /**
  * Fetch wrapper that attaches the access token and recovers from expiry.
  *

@@ -63,6 +63,11 @@ export const env = {
     refreshTtl: optional("JWT_REFRESH_TTL", "30d"),
   },
 
+  // This API's own public address, for the OAuth documents MCP connectors read.
+  // Differs from clientOrigin when the web app is hosted apart (a static site
+  // beside the API); Render sets RENDER_EXTERNAL_URL on the API service itself.
+  publicUrl: optional("PUBLIC_URL") || optional("RENDER_EXTERNAL_URL"),
+
   // Encrypts the auth tokens saved for MCP servers. Falls back to the refresh
   // secret so an install that already has one needs no new variable; the API
   // and the agent worker must both see the same value to read a saved token.

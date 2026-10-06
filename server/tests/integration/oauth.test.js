@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { signUp, startTestApp } from "../helpers.js";
+import { env } from "../../src/config/env.js";
 
 let app;
 let user;
@@ -92,6 +93,25 @@ describe("discovery", () => {
     assert.deepEqual(as.code_challenge_methods_supported, ["S256"]);
     assert.match(as.registration_endpoint, /\/api\/oauth\/register$/);
     assert.match(as.token_endpoint, /\/api\/oauth\/token$/);
+  });
+});
+
+describe("web app hosted apart from the API", () => {
+  test("sends API endpoints to the API and only the consent page to the web app", async () => {
+    const before = env.publicUrl;
+    env.publicUrl = "https://api.example.com/";
+    try {
+      const as = await (await fetch(`${app.baseUrl}/.well-known/oauth-authorization-server`)).json();
+      assert.equal(as.issuer, "https://api.example.com");
+      assert.equal(as.token_endpoint, "https://api.example.com/api/oauth/token");
+      assert.equal(as.registration_endpoint, "https://api.example.com/api/oauth/register");
+      assert.equal(new URL(as.authorization_endpoint).origin, new URL(env.clientOrigin).origin);
+
+      const pr = await (await fetch(`${app.baseUrl}/.well-known/oauth-protected-resource/api/mcp`)).json();
+      assert.equal(pr.resource, "https://api.example.com/api/mcp");
+    } finally {
+      env.publicUrl = before;
+    }
   });
 });
 

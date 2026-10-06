@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiKeyApi, connectionApi } from "@/services/apiKey.api";
+import { apiUrl } from "@/lib/apiClient";
 import PageHeader from "@/components/layout/PageHeader";
 import Card from "@/components/common/Card";
 import Button from "@/components/common/Button";
@@ -14,8 +15,8 @@ import Field from "@/components/forms/Field";
  * that read a config file use a key instead. A key is shown once, right after
  * it is made - only a hash is stored.
  */
-const MCP_URL = `${window.location.origin}/api/mcp`;
-const isLocal = /^(localhost|127\.|\[::1\])/.test(window.location.hostname);
+const MCP_URL = apiUrl("/mcp");
+const isLocal = /^(localhost|127\.|\[::1\])/.test(new URL(MCP_URL).hostname);
 
 export default function ConnectAiTools() {
   const queryClient = useQueryClient();
