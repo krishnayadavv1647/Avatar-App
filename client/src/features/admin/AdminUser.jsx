@@ -11,6 +11,7 @@ import { timeAgo } from "@/utils/timeAgo";
 import AdminGate from "./AdminGate";
 import { Stat, Th } from "./parts";
 import { compact, date, dateTime, duration, money } from "./format";
+import { SOURCE_LABEL } from "./users/userUi";
 
 /**
  * One user, as an admin sees them: their account, their plan, their
@@ -49,8 +50,8 @@ function Detail() {
 
   return (
     <>
-      <Link to="/admin" className="text-ui text-text-muted hover:text-text">
-        ← Admin
+      <Link to="/admin?tab=users" className="text-ui text-text-muted hover:text-text">
+        ← Users
       </Link>
 
       <header className="mb-6 mt-3 flex flex-wrap items-start justify-between gap-4">
@@ -64,6 +65,7 @@ function Detail() {
           <p className="mt-1 text-ui text-text-faint">
             {workspace?.name || "No workspace"} · signed up {date(user.createdAt)} · last sign-in{" "}
             {user.lastLoginAt ? timeAgo(user.lastLoginAt) : "never"}
+            {user.organization && ` · ${user.organization}`} · {SOURCE_LABEL[user.source] || "Sign-up"}
           </p>
         </div>
         <BlockControl user={user} />
@@ -164,7 +166,7 @@ function useUserUpdate(id) {
   const queryClient = useQueryClient();
   return (data) => {
     queryClient.setQueryData(["admin-user", String(id)], data);
-    for (const key of ["admin-users", "admin-overview", "admin-plans"]) {
+    for (const key of ["admin-users", "admin-overview", "admin-plans", "admin-stats"]) {
       queryClient.invalidateQueries({ queryKey: [key] });
     }
   };
@@ -205,7 +207,7 @@ function BlockControl({ user }) {
         variant="danger"
         onClick={() => setOpen(true)}
         disabled={user.admin}
-        title={user.admin ? "Admins cannot be blocked. Remove them from ADMIN_EMAILS first." : undefined}
+        title={user.admin ? "Admins cannot be blocked. Demote them first." : undefined}
       >
         Block user
       </Button>
@@ -264,7 +266,7 @@ function PlanCard({ userId, subscription, limits, used }) {
 
   const minutesLine = limits
     ? limits.includedMinutes
-      ? `${used} of ${limits.includedMinutes} min used this month${limits.overageEnabled ? ", overage on" : ""}`
+      ? `${used} of ${limits.allowanceMinutes ?? limits.includedMinutes} min used this month${limits.bonusMinutes ? ` (${limits.includedMinutes} plan + ${limits.bonusMinutes} bonus)` : ""}${limits.overageEnabled ? ", overage on" : ""}`
       : `${used} min used this month · no monthly cap`
     : "—";
 
@@ -289,7 +291,7 @@ function PlanCard({ userId, subscription, limits, used }) {
         </div>
 
         {assignable.length === 0 ? (
-          <Link to="/admin/plans" className="text-ui text-pink hover:underline">
+          <Link to="/admin?tab=plans" className="text-ui text-pink hover:underline">
             Create a plan to assign one
           </Link>
         ) : (

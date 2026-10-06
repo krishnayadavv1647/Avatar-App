@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import Sidebar from "./Sidebar";
 import { useUi } from "@/store/ui.store";
+import { useBranding } from "@/hooks/useBranding";
 
 /**
  * Sidebar plus a scrolling content column.
@@ -17,6 +18,7 @@ import { useUi } from "@/store/ui.store";
 export default function AppShell({ children, wide = false }) {
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const setNavOpen = useUi((s) => s.setNavOpen);
+  const brand = useBranding();
 
   return (
     <div className="min-h-screen bg-bg">
@@ -39,8 +41,8 @@ export default function AppShell({ children, wide = false }) {
             </svg>
           </button>
           <span className="flex items-center gap-2">
-            <img src="/logo.png" alt="" aria-hidden className="h-6 w-6 shrink-0 object-contain" />
-            <span className="text-ui font-semibold">Avatar Studio</span>
+            <img src={brand.logoUrl} alt="" aria-hidden className="h-6 w-6 shrink-0 object-contain" />
+            <span className="text-ui font-semibold">{brand.name}</span>
           </span>
         </header>
 

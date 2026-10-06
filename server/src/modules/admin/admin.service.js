@@ -1,17 +1,19 @@
 import {
-  AuditLog,
   Avatar,
+  Invitation,
   Conversation,
   KnowledgeDocument,
   Plan,
   Subscription,
+  UsageLedger,
   User,
   Workspace,
 } from "../../models/index.js";
-import { isPlatformAdmin } from "../../middleware/admin.js";
+import { isPlatformAdmin, isSuperAdmin } from "../../middleware/admin.js";
 import { authService } from "../auth/auth.service.js";
-import { roomService } from "../rooms/room.service.js";
 import { usageService } from "../billing/usage.service.js";
+import { plansService } from "./plans.service.js";
+import { audit, endLiveCalls, fail, notFound } from "./admin.shared.js";
 import { logger } from "../../config/logger.js";
 
 /**
@@ -25,14 +27,8 @@ import { logger } from "../../config/logger.js";
  */
 
 const DAY = 24 * 60 * 60 * 1000;
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 30;
 const CHART_DAYS = 14;
-
-const notFound = () => {
-  const err = new Error("User not found");
-  err.statusCode = 404;
-  return err;
-};
 
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -58,6 +54,22 @@ function lastDays(days, tz, now = Date.now()) {
 const minutes = (seconds) => Math.round((seconds / 60) * 10) / 10;
 
 export const adminService = {
+  /** Total users, users not blocked, invitations still open, and every minute of calls ever made. */
+  async stats() {
+    const [totalUsers, blocked, pendingInvites, minutes] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ blockedAt: { $ne: null } }),
+      Invitation.countDocuments({ status: "pending", expiresAt: { $gt: new Date() } }),
+      UsageLedger.aggregate([{ $group: { _id: null, minutes: { $sum: "$minutes" } } }]),
+    ]);
+    return {
+      totalUsers,
+      activeUsers: totalUsers - blocked,
+      pendingInvites,
+      totalMinutes: Math.round((minutes[0]?.minutes || 0) * 10) / 10,
+    };
+  },
+
   async overview({ tz }) {
     const zone = safeZone(tz);
     const now = Date.now();
@@ -145,81 +157,33 @@ export const adminService = {
     };
   },
 
-  async listUsers({ q, page = 1 }) {
-    const filter = q
-      ? {
-          $or: [
-            { email: { $regex: escapeRegex(q), $options: "i" } },
-            { name: { $regex: escapeRegex(q), $options: "i" } },
-          ],
-        }
-      : {};
+  /**
+   * One page of users matching the filters, with what each row shows. Search,
+   * filters and paging all happen here, so the screen never holds more than a
+   * page and the CSV export can reuse the exact same filter.
+   */
+  async listUsers({ page = 1, ...filters }) {
+    const filter = await userFilter(filters);
 
-    const [total, users] = await Promise.all([
+    const [total, activeTotal, users] = await Promise.all([
       User.countDocuments(filter),
+      User.countDocuments({ blockedAt: null }),
       User.find(filter)
         .sort({ createdAt: -1 })
         .skip((page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE)
-        .select("email name workspaceId createdAt lastLoginAt blockedAt")
+        .select(USER_ROW_FIELDS)
         .lean(),
     ]);
 
-    const workspaceIds = users.map((u) => u.workspaceId).filter(Boolean);
-    const [avatarCounts, callStats, subscriptions] = await Promise.all([
-      Avatar.aggregate([
-        { $match: { workspaceId: { $in: workspaceIds } } },
-        { $group: { _id: "$workspaceId", n: { $sum: 1 } } },
-      ]),
-      Conversation.aggregate([
-        { $match: { workspaceId: { $in: workspaceIds } } },
-        {
-          $group: {
-            _id: "$workspaceId",
-            calls: { $sum: 1 },
-            seconds: { $sum: "$durationSec" },
-            lastCallAt: { $max: "$createdAt" },
-          },
-        },
-      ]),
-      Subscription.find({ workspaceId: { $in: workspaceIds } })
-        .select("workspaceId plan planId")
-        .populate("planId", "name")
-        .lean(),
-    ]);
-
-    const avatars = keyed(avatarCounts);
-    const calls = keyed(callStats);
-    const plans = new Map(subscriptions.map((s) => [String(s.workspaceId), s.planId?.name || s.plan]));
-
-    return {
-      total,
-      page,
-      pageSize: PAGE_SIZE,
-      users: users.map((u) => {
-        const ws = String(u.workspaceId);
-        const stat = calls.get(ws);
-        return {
-          id: u._id,
-          email: u.email,
-          name: u.name || null,
-          admin: isPlatformAdmin(u.email),
-          blocked: Boolean(u.blockedAt),
-          plan: plans.get(ws) || null,
-          createdAt: u.createdAt,
-          lastLoginAt: u.lastLoginAt || null,
-          lastCallAt: stat?.lastCallAt || null,
-          avatars: avatars.get(ws)?.n || 0,
-          calls: stat?.calls || 0,
-          minutes: minutes(stat?.seconds || 0),
-        };
-      }),
-    };
+    return { total, activeTotal, page, pageSize: PAGE_SIZE, users: await userRows(users) };
   },
 
   async getUser(id) {
     const user = await User.findById(id)
-      .select("email name role workspaceId createdAt lastLoginAt blockedAt blockedReason blockedBy")
+      .select(
+        "email name role platformAdmin organization source workspaceId createdAt lastLoginAt blockedAt blockedReason blockedBy",
+      )
       .populate("blockedBy", "email")
       .lean();
     if (!user) throw notFound();
@@ -229,7 +193,7 @@ export const adminService = {
       await Promise.all([
         Workspace.findById(workspaceId).select("name createdAt settings").lean(),
         Subscription.findOne({ workspaceId })
-          .select("plan planId status assignedAt")
+          .select("plan planId status assignedAt bonusMinutes")
           .populate("planId", "name key")
           .lean(),
         Avatar.find({ workspaceId })
@@ -258,7 +222,9 @@ export const adminService = {
       user: {
         ...user,
         id: user._id,
-        admin: isPlatformAdmin(user.email),
+        admin: isPlatformAdmin(user),
+        superAdmin: isSuperAdmin(user.email),
+        source: user.source || "signup",
         blocked: Boolean(user.blockedAt),
         blockedBy: user.blockedBy?.email || null,
       },
@@ -269,6 +235,7 @@ export const adminService = {
         planName: subscription.planId?.name || null,
         status: subscription.status,
         assignedAt: subscription.assignedAt || null,
+        bonusMinutes: subscription.bonusMinutes || 0,
       },
       limits,
       minutesThisMonth: minutes(minutesThisMonth * 60),
@@ -299,126 +266,90 @@ export const adminService = {
 
 /* ---------------------------------------------------------------- actions */
 
-const fail = (status, message) => {
-  const err = new Error(message);
-  err.statusCode = status;
-  return err;
-};
-
-async function audit({ user, admin, action, meta, ip }) {
-  if (!user.workspaceId) return;
-  await AuditLog.create({
-    workspaceId: user.workspaceId,
-    actorId: admin._id,
-    action,
-    target: { kind: "user", id: String(user._id) },
-    meta,
-    ip,
-  }).catch((err) => logger.warn({ err: err.message, action }, "audit log write failed"));
-}
-
 Object.assign(adminService, {
   /**
    * Blocks an account: sign-in, token refresh and every API call are refused
    * from now on, refresh tokens are revoked, its live calls are ended, and -
    * for a workspace owner - its avatars stop answering share links.
    *
-   * Admins cannot be blocked (take them off ADMIN_EMAILS first), and nobody
-   * can block themselves.
+   * Admins cannot be blocked (demote them first), and nobody can block
+   * themselves.
    */
   async block(id, { reason }, { admin, ip }) {
-    const user = await User.findById(id).select("email workspaceId").lean();
-    if (!user) throw notFound();
-    if (String(user._id) === String(admin._id)) throw fail(422, "You cannot block yourself.");
-    if (isPlatformAdmin(user.email)) {
-      throw fail(422, "Admins cannot be blocked. Remove them from ADMIN_EMAILS first.");
-    }
-
-    await User.updateOne(
-      { _id: user._id },
-      { $set: { blockedAt: new Date(), blockedReason: reason || undefined, blockedBy: admin._id } },
-    );
-    await authService.revokeAll(user._id);
-    const ended = await endLiveCalls(user);
-
-    await audit({ user, admin, action: "admin.user.block", meta: { reason, endedCalls: ended }, ip });
-    logger.info({ userId: String(user._id), endedCalls: ended }, "user blocked by admin");
+    await blockUser(id, { reason }, { admin, ip });
     return this.getUser(id);
   },
 
   async unblock(id, { admin, ip }) {
-    const user = await User.findById(id).select("workspaceId").lean();
-    if (!user) throw notFound();
-
-    await User.updateOne(
-      { _id: user._id },
-      { $unset: { blockedAt: "", blockedReason: "", blockedBy: "" } },
-    );
-    await audit({ user, admin, action: "admin.user.unblock", ip });
+    await unblockUser(id, { admin, ip });
     return this.getUser(id);
   },
 
   /** Puts the user's workspace on a plan; its limits apply from the next call. */
   async assignPlan(id, { planId }, { admin, ip }) {
-    const user = await User.findById(id).select("workspaceId").lean();
-    if (!user) throw notFound();
-    if (!user.workspaceId) throw fail(422, "This user has no workspace to put on a plan.");
-
-    const plan = await Plan.findById(planId).lean();
-    if (!plan) throw fail(404, "Plan not found");
-    if (!plan.active) throw fail(422, "That plan is archived and cannot be assigned.");
-
-    const previous = await Subscription.findOne({ workspaceId: user.workspaceId }).select("plan").lean();
-    await Subscription.updateOne(
-      { workspaceId: user.workspaceId },
-      {
-        $set: {
-          plan: plan.key,
-          planId: plan._id,
-          assignedAt: new Date(),
-          assignedBy: admin._id,
-          status: "active",
-        },
-      },
-      { upsert: true },
-    );
-
-    await audit({
-      user,
-      admin,
-      action: "admin.plan.assign",
-      meta: { from: previous?.plan || null, to: plan.key },
-      ip,
-    });
+    await assignPlanTo(id, planId, { admin, ip });
     return this.getUser(id);
   },
 });
 
 /**
- * Ends what a blocked user has running. For a workspace owner that is every
- * call in the workspace, share-link calls included; for a member, their own.
+ * The block, unblock and assign steps, without the trailing re-read, so the
+ * Edit User flow can chain them in one save.
  */
-async function endLiveCalls(user) {
-  if (!user.workspaceId) return 0;
-  const workspace = await Workspace.findById(user.workspaceId);
-  if (!workspace) return 0;
+export async function blockUser(id, { reason }, { admin, ip }) {
+  const user = await User.findById(id).select("email platformAdmin workspaceId").lean();
+  if (!user) throw notFound();
+  if (String(user._id) === String(admin._id)) throw fail(422, "You cannot block yourself.");
+  if (isPlatformAdmin(user)) throw fail(422, "Admins cannot be blocked. Demote them first.");
 
-  const owner = String(workspace.ownerId) === String(user._id);
-  const live = await Conversation.find({
-    workspaceId: workspace._id,
-    status: { $in: ["pending", "active"] },
-    ...(owner ? {} : { userId: user._id }),
-  })
-    .select("_id")
-    .lean();
+  await User.updateOne(
+    { _id: user._id },
+    { $set: { blockedAt: new Date(), blockedReason: reason || undefined, blockedBy: admin._id } },
+  );
+  await authService.revokeAll(user._id);
+  const ended = await endLiveCalls(user);
 
-  for (const c of live) {
-    await roomService
-      .endCall({ workspace, conversationId: c._id, endReason: "account blocked" })
-      .catch((err) => logger.warn({ err: err.message, conversationId: String(c._id) }, "could not end call"));
-  }
-  return live.length;
+  await audit({
+    workspaceId: user.workspaceId,
+    admin,
+    action: "admin.user.block",
+    target: userTarget(user),
+    meta: { reason, endedCalls: ended },
+    ip,
+  });
+  logger.info({ userId: String(user._id), endedCalls: ended }, "user blocked by admin");
 }
+
+export async function unblockUser(id, { admin, ip }) {
+  const user = await User.findById(id).select("workspaceId").lean();
+  if (!user) throw notFound();
+
+  await User.updateOne({ _id: user._id }, { $unset: { blockedAt: "", blockedReason: "", blockedBy: "" } });
+  await audit({ workspaceId: user.workspaceId, admin, action: "admin.user.unblock", target: userTarget(user), ip });
+}
+
+export async function assignPlanTo(id, planId, { admin, ip }) {
+  const user = await User.findById(id).select("workspaceId").lean();
+  if (!user) throw notFound();
+  if (!user.workspaceId) throw fail(422, "This user has no workspace to put on a plan.");
+
+  const plan = await Plan.findById(planId).lean();
+  if (!plan) throw fail(404, "Plan not found");
+  if (!plan.active) throw fail(422, "That plan is archived and cannot be assigned.");
+
+  const from = await plansService.assign({ workspaceId: user.workspaceId, plan, assignedBy: admin._id });
+  await audit({
+    workspaceId: user.workspaceId,
+    admin,
+    action: "admin.plan.assign",
+    target: userTarget(user),
+    meta: { from, to: plan.key },
+    ip,
+  });
+  return plan;
+}
+
+const userTarget = (user) => ({ kind: "user", id: String(user._id) });
 
 async function sumCalls(match) {
   const [row] = await Conversation.aggregate([
@@ -435,6 +366,106 @@ async function sumCalls(match) {
   return row || { calls: 0, seconds: 0, costCents: 0 };
 }
 
+const USER_ROW_FIELDS =
+  "email name role platformAdmin organization source workspaceId createdAt lastLoginAt blockedAt";
+
+/**
+ * The MongoDB filter for the Users tab and its export: free-text search,
+ * status (a block is what "suspended" means here), plan, and source.
+ */
+export async function userFilter({ q, status, plan, source } = {}) {
+  const clauses = [];
+
+  if (q) {
+    clauses.push({
+      $or: [
+        { email: { $regex: escapeRegex(q), $options: "i" } },
+        { name: { $regex: escapeRegex(q), $options: "i" } },
+      ],
+    });
+  }
+  if (status === "active") clauses.push({ blockedAt: null });
+  if (status === "suspended") clauses.push({ blockedAt: { $ne: null } });
+  // Accounts from before `source` existed have none, and were all sign-ups.
+  if (source === "signup") clauses.push({ $or: [{ source: "signup" }, { source: null }] });
+  else if (source) clauses.push({ source });
+  if (plan) {
+    const subs = await Subscription.find({ planId: plan }).select("workspaceId").lean();
+    clauses.push({ workspaceId: { $in: subs.map((s) => s.workspaceId) } });
+  }
+
+  return clauses.length ? { $and: clauses } : {};
+}
+
+/**
+ * Turns user documents into what a list row shows: identity and status, the
+ * plan with its minutes and the bonus on top, the workspace, and usage.
+ * Avatars, calls and minutes are per workspace, so a row's figures are its
+ * workspace's.
+ */
+export async function userRows(users) {
+  const workspaceIds = users.map((u) => u.workspaceId).filter(Boolean);
+  const [avatarCounts, callStats, subscriptions, workspaces] = await Promise.all([
+    Avatar.aggregate([
+      { $match: { workspaceId: { $in: workspaceIds } } },
+      { $group: { _id: "$workspaceId", n: { $sum: 1 } } },
+    ]),
+    Conversation.aggregate([
+      { $match: { workspaceId: { $in: workspaceIds } } },
+      {
+        $group: {
+          _id: "$workspaceId",
+          calls: { $sum: 1 },
+          seconds: { $sum: "$durationSec" },
+          lastCallAt: { $max: "$createdAt" },
+        },
+      },
+    ]),
+    Subscription.find({ workspaceId: { $in: workspaceIds } })
+      .select("workspaceId plan planId bonusMinutes includedMinutes")
+      .populate("planId", "name includedMinutes")
+      .lean(),
+    Workspace.find({ _id: { $in: workspaceIds } }).select("name").lean(),
+  ]);
+
+  const avatars = keyed(avatarCounts);
+  const calls = keyed(callStats);
+  const subs = new Map(subscriptions.map((s) => [String(s.workspaceId), s]));
+  const spaces = new Map(workspaces.map((w) => [String(w._id), w]));
+
+  return users.map((u) => {
+    const ws = String(u.workspaceId);
+    const stat = calls.get(ws);
+    const sub = subs.get(ws);
+    const space = spaces.get(ws);
+    const admin = isPlatformAdmin(u);
+    return {
+      id: u._id,
+      email: u.email,
+      name: u.name || null,
+      organization: u.organization || null,
+      source: u.source || "signup",
+      role: admin ? "admin" : "user",
+      admin,
+      superAdmin: isSuperAdmin(u.email),
+      blocked: Boolean(u.blockedAt),
+      status: u.blockedAt ? "suspended" : "active",
+      plan: sub?.planId?.name || sub?.plan || null,
+      planId: sub?.planId?._id || null,
+      // Zero plan minutes means the plan has no monthly cap.
+      planMinutes: sub?.planId ? (sub.planId.includedMinutes ?? 0) : (sub?.includedMinutes ?? 0),
+      bonusMinutes: sub?.bonusMinutes || 0,
+      workspace: space ? { id: space._id, name: space.name } : null,
+      createdAt: u.createdAt,
+      lastLoginAt: u.lastLoginAt || null,
+      lastCallAt: stat?.lastCallAt || null,
+      avatars: avatars.get(ws)?.n || 0,
+      calls: stat?.calls || 0,
+      minutes: minutes(stat?.seconds || 0),
+    };
+  });
+}
+
 const keyed = (rows) => new Map(rows.map((r) => [String(r._id), r]));
 
 async function usersById(ids) {
@@ -442,4 +473,10 @@ async function usersById(ids) {
   if (!unique.length) return new Map();
   const users = await User.find({ _id: { $in: unique } }).select("email name").lean();
   return new Map(users.map((u) => [String(u._id), { id: u._id, email: u.email, name: u.name || null }]));
+}
+
+/** One user's list row, or null if they are gone. */
+export async function userRowById(id) {
+  const user = await User.findById(id).select(USER_ROW_FIELDS).lean();
+  return user ? (await userRows([user]))[0] : null;
 }

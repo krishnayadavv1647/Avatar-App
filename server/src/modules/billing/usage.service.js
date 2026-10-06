@@ -97,7 +97,9 @@ export const usageService = {
     if (limits.overageEnabled) return;
 
     const used = await this.minutesThisPeriod(workspace._id);
-    const included = limits.includedMinutes;
+    // Bonus minutes ride on top of a metered plan. An unmetered one (0 included)
+    // stays unmetered: a bonus must not turn "no cap" into a small one.
+    const included = limits.allowanceMinutes;
 
     // Zero included minutes means the plan is not metered this way (the free
     // tier during development), not that every call should be refused.
@@ -126,7 +128,7 @@ export const usageService = {
       return {
         planId: plan._id,
         planName: plan.name,
-        includedMinutes: plan.includedMinutes ?? 0,
+        ...minutesFor(plan.includedMinutes, subscription.bonusMinutes),
         overageEnabled: Boolean(plan.overageEnabled),
         concurrencyLimit: plan.concurrencyLimit ?? 3,
         maxAvatars: plan.maxAvatars ?? 0,
@@ -135,7 +137,7 @@ export const usageService = {
     return {
       planId: null,
       planName: subscription?.plan || null,
-      includedMinutes: subscription?.includedMinutes ?? 0,
+      ...minutesFor(subscription?.includedMinutes, subscription?.bonusMinutes),
       // No subscription at all has always meant "not metered".
       overageEnabled: subscription ? Boolean(subscription.overageEnabled) : true,
       concurrencyLimit: workspace.settings?.concurrencyLimit ?? 3,
@@ -212,6 +214,8 @@ export const usageService = {
         ? {
             name: limits.planName,
             includedMinutes: limits.includedMinutes,
+            bonusMinutes: limits.bonusMinutes,
+            allowanceMinutes: limits.allowanceMinutes,
             overageEnabled: limits.overageEnabled,
             maxAvatars: limits.maxAvatars,
           }
@@ -220,6 +224,21 @@ export const usageService = {
     };
   },
 };
+
+/**
+ * What a workspace may use each month: the plan's minutes plus any bonus an
+ * admin granted. Both are returned so screens can show them apart; the sum is
+ * what is enforced.
+ */
+function minutesFor(includedMinutes, bonusMinutes) {
+  const included = includedMinutes ?? 0;
+  const bonus = bonusMinutes ?? 0;
+  return {
+    includedMinutes: included,
+    bonusMinutes: bonus,
+    allowanceMinutes: included > 0 ? included + bonus : 0,
+  };
+}
 
 function startOfMonth() {
   const now = new Date();

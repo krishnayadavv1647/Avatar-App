@@ -3,6 +3,8 @@ import { api } from "@/lib/apiClient";
 /** Platform admin. Every route but `access` answers 403 unless the caller is in ADMIN_EMAILS. */
 export const adminApi = {
   access: () => api.get("/admin/access").then((r) => r.admin),
+  /** Total users, active users, open invitations, minutes used. */
+  stats: () => api.get("/admin/stats"),
   overview: () =>
     api.get(`/admin/overview?tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`),
   users: ({ q = "", page = 1 } = {}) =>

@@ -7,6 +7,7 @@ import { PRESETS } from "@/features/studio/presets";
 import MediaPreview from "@/components/media/MediaPreview";
 import Button from "@/components/common/Button";
 import AvatarCard from "@/features/avatars/AvatarCard";
+import BannerCover from "@/features/site/BannerCover";
 
 /**
  * The dashboard: a wide hero banner, a row of templates, then your avatars.
@@ -27,7 +28,8 @@ export default function Home() {
 
   return (
     <>
-      <HeroCarousel avatars={avatars || []} onCreate={show} />
+      {/* An admin's hero banners replace the built-in hero; with none active this is the same hero as before. */}
+      <BannerCover onCreate={show} fallback={<HeroCarousel avatars={avatars || []} onCreate={show} />} />
 
       <section className="mt-8 px-6">
         <div className="border-b border-border">

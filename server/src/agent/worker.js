@@ -15,6 +15,8 @@ import { knowledgePrompt } from "../ai/knowledge.js";
 import { knowledgeService } from "../modules/avatars/knowledge.service.js";
 import { mcpService } from "../modules/avatars/mcp.service.js";
 import { connectMcpTools } from "../integrations/mcp/index.js";
+import { errorDetails, logError } from "../utils/errorLog.js";
+import { applyApiConfigs } from "../modules/admin/system/apiConfig.service.js";
 import { preflight } from "./preflight.js";
 import { isPreviewRoom, runPreview } from "./preview.job.js";
 
@@ -37,6 +39,8 @@ const MEETING_IDLE_SECONDS = 600;
 export default defineAgent({
   entry: async (ctx) => {
     if (mongoose.connection.readyState === 0) await connectDb();
+    // A job runs in its own process, so keys saved in the admin panel reach it only here.
+    await applyApiConfigs().catch((err) => logger.warn({ err: err.message }, "could not apply saved API keys"));
 
     await ctx.connect();
 
@@ -129,6 +133,14 @@ export default defineAgent({
      */
     const failStart = async (err) => {
       logger.error({ err: err.message, room: ctx.room.name }, "call failed to start");
+      logError({
+        errorType: "CALL_FAILED",
+        message: err.message,
+        functionName: "agent.failStart",
+        details: errorDetails(err, { room: ctx.room.name, avatar: avatar.name, provider: avatar.providerId }),
+        relatedEntityType: "Conversation",
+        relatedEntityId: String(conversation._id),
+      });
       endReason = `failed to start: ${err.message}`;
       failed = true;
       await finish();
@@ -252,6 +264,14 @@ export default defineAgent({
  */
 async function abandon(ctx, conversation, reason) {
   logger.error({ room: ctx.room.name, reason }, "call abandoned");
+  logError({
+    errorType: "CALL_FAILED",
+    message: reason,
+    functionName: "agent.abandon",
+    details: { room: ctx.room.name },
+    relatedEntityType: "Conversation",
+    relatedEntityId: String(conversation._id),
+  });
   await roomService
     .finish(conversation._id, { endReason: reason, status: "failed" })
     .catch((err) => logger.error({ err, conversationId: String(conversation._id) }, "finish failed"));

@@ -7,6 +7,7 @@ import Card from "@/components/common/Card";
 import Button from "@/components/common/Button";
 import Field from "@/components/forms/Field";
 import GoogleButton from "./GoogleButton";
+import { useBranding } from "@/hooks/useBranding";
 
 /**
  * Sign in and sign up share a form because they differ by one field and one
@@ -17,6 +18,7 @@ import GoogleButton from "./GoogleButton";
  */
 export default function SignIn({ mode = "login" }) {
   const isRegister = mode === "register";
+  const brand = useBranding();
   const navigate = useNavigate();
   const location = useLocation();
   const setSession = useAuth((s) => s.setSession);
@@ -50,8 +52,8 @@ export default function SignIn({ mode = "login" }) {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-gutter py-16">
       <div className="mb-8 flex items-center gap-2">
-        <img src="/logo.png" alt="" aria-hidden className="h-8 w-8 shrink-0 object-contain" />
-        <span className="font-medium">Avatar Studio</span>
+        <img src={brand.logoUrl} alt="" aria-hidden className="h-8 w-8 shrink-0 object-contain" />
+        <span className="font-medium">{brand.name}</span>
       </div>
 
       <h1>{isRegister ? "Create your workspace" : "Sign in"}</h1>

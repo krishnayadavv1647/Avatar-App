@@ -3,6 +3,7 @@ import { Avatar, TrainingJob } from "../models/index.js";
 import { getProvider } from "./providers/registry.js";
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
+import { logError } from "../utils/errorLog.js";
 
 /**
  * Resolving asynchronous face training.
@@ -123,6 +124,15 @@ async function applyToAvatar(job, result) {
       { $set: { status: "failed", failureReason: result.error || "Training failed" } },
     );
     logger.warn({ avatarId: String(job.avatarId), error: result.error }, "avatar training failed");
+    logError({
+      errorType: "TRAINING_FAILED",
+      message: result.error || "Training failed",
+      functionName: "training.reconcile",
+      severity: "WARNING",
+      details: { jobId: String(job._id), providerId: job.providerId },
+      relatedEntityType: "Avatar",
+      relatedEntityId: String(job.avatarId),
+    });
   }
 }
 

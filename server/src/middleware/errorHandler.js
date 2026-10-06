@@ -1,5 +1,6 @@
 import { logger } from "../config/logger.js";
 import { isProd } from "../config/env.js";
+import { errorDetails, logError } from "../utils/errorLog.js";
 
 /** 404 for anything the routers did not claim. */
 export function notFound(req, res) {
@@ -32,6 +33,14 @@ export function errorHandler(err, req, res, next) {
     logger.warn({ msg: err.message, name: err.name, path: req.path, status }, "request rejected");
   } else {
     logger.error({ err, path: req.path, method: req.method }, "request failed");
+    // Shown in the admin's Error Logs tab. Only faults, not deliberate rejections.
+    logError({
+      errorType: "REQUEST_FAILED",
+      message: err.message,
+      functionName: `${req.method} ${req.path}`,
+      userEmail: undefined,
+      details: errorDetails(err, { userId: req.auth?.userId }),
+    });
   }
 
   res.status(status).json({

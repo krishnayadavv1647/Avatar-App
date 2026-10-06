@@ -5,6 +5,9 @@ import { authApi } from "@/services/auth.api";
 import { useAuth } from "@/store/auth.store";
 import { useUi } from "@/store/ui.store";
 import { useIsAdmin } from "@/features/admin/useIsAdmin";
+import { useBranding } from "@/hooks/useBranding";
+import NotificationPopup from "@/features/site/NotificationPopup";
+import { useNotificationSummary } from "@/features/site/useNotificationSummary";
 
 /**
  * Left navigation, grouped by what you are doing.
@@ -35,6 +38,7 @@ const SECTIONS = [
       { to: "/conversations", label: "Conversations", icon: ChatIcon },
       { to: "/analytics", label: "Usage", icon: ChartIcon },
       { to: "/connect", label: "AI tools", icon: PlugIcon },
+      { to: "/notifications", label: "Notifications", icon: BellIcon, badge: true },
     ],
   },
 ];
@@ -43,8 +47,7 @@ const SECTIONS = [
 const ADMIN_SECTION = {
   title: "Admin",
   items: [
-    { to: "/admin", label: "Overview", icon: ShieldIcon, end: true },
-    { to: "/admin/plans", label: "Plans", icon: TagIcon },
+    { to: "/admin", label: "Admin panel", icon: ShieldIcon },
   ],
 };
 
@@ -84,6 +87,8 @@ export default function Sidebar() {
   // Collapsing to icons is a desktop preference; the drawer always has labels.
   const collapsed = useUi((s) => s.sidebarCollapsed) && desktop;
   const { isAdmin } = useIsAdmin();
+  const unreadNotifications = useNotificationSummary().data?.unreadCount || 0;
+  const brand = useBranding();
   const sections = isAdmin ? [...SECTIONS, ADMIN_SECTION] : SECTIONS;
   const toggle = useUi((s) => s.toggleSidebar);
   const navOpen = useUi((s) => s.navOpen);
@@ -127,8 +132,8 @@ export default function Sidebar() {
       >
         {!collapsed && (
           <span className="flex items-center gap-2">
-            <img src="/logo.png" alt="" aria-hidden className="h-7 w-7 shrink-0 object-contain" />
-            <span className="font-semibold">Avatar Studio</span>
+            <img src={brand.logoUrl} alt="" aria-hidden className="h-7 w-7 shrink-0 object-contain" />
+            <span className="font-semibold">{brand.name}</span>
           </span>
         )}
         {drawer ? (
@@ -164,8 +169,9 @@ export default function Sidebar() {
               </p>
             )}
 
-            {section.items.map(({ to, label, icon: Icon, end }) => {
-              const hint = collapsed ? label : undefined;
+            {section.items.map(({ to, label, icon: Icon, end, badge }) => {
+              const count = badge ? unreadNotifications : 0;
+              const hint = collapsed ? (count ? `${label} (${count})` : label) : undefined;
 
               return (
                 <NavLink
@@ -173,9 +179,10 @@ export default function Sidebar() {
                   to={to}
                   end={end}
                   title={hint}
-                  aria-label={collapsed ? label : undefined}
+                  aria-label={collapsed ? hint : undefined}
                   className={({ isActive }) =>
                     clsx(
+                      "relative",
                       itemClass(collapsed),
                       isActive
                         ? "bg-surface-active text-text"
@@ -185,6 +192,17 @@ export default function Sidebar() {
                 >
                   <Icon />
                   {!collapsed && label}
+                  {count > 0 && (
+                    <span
+                      aria-label={`${count} unread`}
+                      className={clsx(
+                        "flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-pink px-1 text-[10px] font-bold text-text-inverse",
+                        collapsed ? "absolute right-1.5 top-1" : "ml-auto",
+                      )}
+                    >
+                      {count > 9 ? "9+" : count}
+                    </span>
+                  )}
                 </NavLink>
               );
             })}
@@ -196,6 +214,8 @@ export default function Sidebar() {
         <AccountCard collapsed={collapsed} />
       </div>
     </aside>
+    {/* Once per signed-in page load, here because the sidebar is on every one of them. */}
+    <NotificationPopup />
     </>
   );
 }
@@ -341,20 +361,19 @@ function ShieldIcon() {
   );
 }
 
-function TagIcon() {
-  return (
-    <svg {...stroke}>
-      <path d="M2.5 3.5v4l6 6 5-5-6-6h-4a1 1 0 0 0-1 1z" />
-      <circle cx="5.5" cy="5.5" r="1" />
-    </svg>
-  );
-}
-
 function AvatarIcon() {
   return (
     <svg {...stroke}>
       <circle cx="8" cy="6" r="2.5" />
       <path d="M3 14c0-2.5 2.2-4 5-4s5 1.5 5 4" />
+    </svg>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg {...stroke}>
+      <path d="M4 11V7a4 4 0 0 1 8 0v4l1.5 1.5h-11zM6.5 14a1.5 1.5 0 0 0 3 0" />
     </svg>
   );
 }

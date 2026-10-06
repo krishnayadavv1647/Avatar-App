@@ -27,6 +27,17 @@ const planSchema = new mongoose.Schema(
     isDefault: { type: Boolean, default: false },
     // Archived plans stay on the users who have them but cannot be assigned.
     active: { type: Boolean, default: true },
+
+    // Presentation, as the admin's plan cards show it.
+    displayOrder: { type: Number, min: 0, default: 0 },
+    // Whether regular users may see the plan; admins always do. Nothing
+    // user-facing lists plans yet, so today it only labels the card.
+    visible: { type: Boolean, default: true },
+    // How the plan is sold. A label for now: the minutes still renew monthly.
+    durationType: { type: String, enum: ["monthly", "lifetime"], default: "monthly" },
+    conditionBoxDescription: { type: String, trim: true },
+    purchaseUrl: { type: String, trim: true },
+    thumbnailUrl: { type: String, trim: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true },

@@ -23,6 +23,11 @@ process.env.ANTHROPIC_API_KEY = "";
 process.env.LEMONSLICE_API_KEY = "";
 process.env.ADMIN_EMAILS = "admin@example.com";
 
+// No real mail from a test run, whatever is in the developer's .env: with no
+// key every send answers "Email is not configured", which is what the
+// invitation and plan-update tests expect.
+process.env.RESEND_API_KEY = "";
+
 // A made-up client id; tests/integration/google-auth.test.js signs its own
 // tokens for it with a key it pretends Google published.
 process.env.GOOGLE_CLIENT_ID = "test-client.apps.googleusercontent.com";

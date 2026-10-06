@@ -14,9 +14,10 @@ import ConnectAiTools from "@/features/connect/ConnectAiTools";
 import ConversationList from "@/features/conversations/ConversationList";
 import ConversationDetail from "@/features/conversations/ConversationDetail";
 import DesignPreview from "@/features/_design/DesignPreview";
-import AdminOverview from "@/features/admin/AdminOverview";
+import AdminPanel from "@/features/admin/AdminPanel";
 import AdminUser from "@/features/admin/AdminUser";
-import AdminPlans from "@/features/admin/AdminPlans";
+import InvitePage from "@/features/invite/InvitePage";
+import NotificationsPage from "@/features/site/NotificationsPage";
 
 /**
  * Signed-in pages live inside the shell; sign-in and the avatar creator do not.
@@ -38,6 +39,8 @@ export default function AppRouter() {
 
       {/* Public: anyone with an avatar's share link, no account needed. */}
       <Route path="/talk/:token" element={<TalkPage />} />
+      {/* Public: the link in an invitation email. Signing in from it returns here. */}
+      <Route path="/invite/:token" element={<InvitePage />} />
       <Route path="/embed/:token" element={<TalkPage embedded />} />
 
       <Route path="/" element={app(<Home />, { wide: true })} />
@@ -62,13 +65,14 @@ export default function AppRouter() {
         }
       />
       <Route path="/connect" element={app(<ConnectAiTools />)} />
+      <Route path="/notifications" element={app(<NotificationsPage />)} />
       <Route path="/conversations" element={app(<ConversationList />)} />
       <Route path="/conversations/:id" element={app(<ConversationDetail />)} />
 
       {/* Platform admins only; the pages check, and the API checks again. */}
-      <Route path="/admin" element={app(<AdminOverview />)} />
+      <Route path="/admin" element={app(<AdminPanel />, { wide: true })} />
       <Route path="/admin/users/:id" element={app(<AdminUser />)} />
-      <Route path="/admin/plans" element={app(<AdminPlans />)} />
+      <Route path="/admin/plans" element={<Navigate to="/admin?tab=plans" replace />} />
 
       <Route path="/call/:avatarId" element={app(<CallRoom />, { wide: true })} />
 

@@ -68,6 +68,18 @@ export const env = {
   // beside the API); Render sets RENDER_EXTERNAL_URL on the API service itself.
   publicUrl: optional("PUBLIC_URL") || optional("RENDER_EXTERNAL_URL"),
 
+  // Outgoing email (invitations, mailing, support replies) through Resend.
+  // Unset, those features still work but show the link/failure instead of sending.
+  mail: {
+    resendApiKey: optional("RESEND_API_KEY"),
+    fromEmail: optional("MAIL_FROM_EMAIL"),
+    defaultFromName: optional("MAIL_FROM_NAME", "Avatar Studio"),
+    supportEmail: optional("SUPPORT_EMAIL"),
+    // Shared secret the mail provider's inbound webhook must send (?token=).
+    // Unset, POST /api/inbound/email answers 503 rather than accepting anyone's mail.
+    inboundToken: optional("INBOUND_EMAIL_TOKEN"),
+  },
+
   // Encrypts the auth tokens saved for MCP servers. Falls back to the refresh
   // secret so an install that already has one needs no new variable; the API
   // and the agent worker must both see the same value to read a saved token.

@@ -22,6 +22,10 @@ const subscriptionSchema = new mongoose.Schema(
     },
     includedMinutes: { type: Number, default: 0 },
     overageEnabled: { type: Boolean, default: false },
+    // Minutes an admin grants on top of the plan, independent of it: changing
+    // plan leaves them alone. Counted into the monthly allowance only when the
+    // plan has one (see usageService).
+    bonusMinutes: { type: Number, min: 0, default: 0 },
     currentPeriodEnd: Date,
   },
   { timestamps: true },

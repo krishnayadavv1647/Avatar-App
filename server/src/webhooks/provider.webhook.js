@@ -2,6 +2,7 @@ import { Router } from "express";
 import { trainingService } from "../avatar/training.service.js";
 import { asyncHandler } from "../middleware/validate.js";
 import { logger } from "../config/logger.js";
+import { errorDetails, logError } from "../utils/errorLog.js";
 
 /**
  * Inbound vendor callbacks for face training.
@@ -34,6 +35,12 @@ router.post(
       res.json({ received: true, ...result });
     } catch (err) {
       logger.error({ err, providerId }, "webhook handling failed");
+      logError({
+        errorType: "WEBHOOK_FAILED",
+        message: err.message,
+        functionName: `webhook.${providerId}`,
+        details: errorDetails(err, { providerId }),
+      });
       res.json({ received: true, matched: false });
     }
   }),

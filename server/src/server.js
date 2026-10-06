@@ -4,6 +4,8 @@ import { startKeepAlive } from "./config/keepAlive.js";
 import { env, isProd } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { getStorage } from "./integrations/storage/registry.js";
+import { startScheduledEmailLoop } from "./modules/comms/scheduler.js";
+import { applyApiConfigs } from "./modules/admin/system/apiConfig.service.js";
 
 // A promise nobody awaited should not take the whole API down with it - and
 // under `node --watch` a dead server stays dead until a file changes, which
@@ -41,6 +43,11 @@ async function connectWithRetry() {
 async function main() {
   await connectWithRetry();
 
+  // Vendor keys saved in the admin panel win over the environment's. Applied
+  // before the first request so nothing runs on a stale key, and a failure here
+  // must not keep the API down - the environment's keys still work.
+  await applyApiConfigs().catch((err) => logger.warn({ err: err.message }, "could not apply saved API keys"));
+
   // Settled before the first request, so every capability readout and every
   // vendor guard is answering from a verified fact rather than a hope.
   await getStorage().verifyPublicAccess();
@@ -49,6 +56,7 @@ async function main() {
   const server = app.listen(env.port, () => {
     logger.info({ port: env.port, provider: env.avatarProvider }, "api listening");
     startKeepAlive();
+    startScheduledEmailLoop();
   });
 
   // Let in-flight requests finish rather than cutting live connections.
