@@ -5,6 +5,7 @@ import KnowledgeBase from "./KnowledgeBase";
 import McpServers from "./McpServers";
 import CustomVoices, { useCustomVoices } from "./CustomVoices";
 import EditVisualsDialog from "./EditVisualsDialog";
+import { useCredits } from "@/features/credits/useCredits";
 
 /**
  * An avatar's settings, laid out like LemonSlice's: a section label with a
@@ -263,6 +264,8 @@ export default function AvatarSettings({ avatar, options, onChange }) {
 
 /** The face on a blurred copy of itself, with the render controls under it. */
 function Visuals({ avatar, render, options, onRender }) {
+  // Only for the per-minute rates in the model labels; without them the labels are just names.
+  const { data: credits } = useCredits({ poll: 5 * 60_000 });
   // Aspect ratio and render model are LemonSlice session options; other
   // vendors would silently ignore them.
   const renderable = avatar.providerId === "lemonslice";
@@ -345,7 +348,7 @@ function Visuals({ avatar, render, options, onRender }) {
               <option key={m.id} value={m.id}>
                 {/* What a minute costs in credits is part of the choice. */}
                 {m.label}
-                {credits?.rates?.[m.id] ? ` · ${credits.rates[m.id]} credits/min` : ""}
+                {credits?.rates?.[m.id] != null ? ` · ${credits.rates[m.id]} credits/min` : ""}
               </option>
             ))}
           </PillSelect>

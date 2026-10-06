@@ -1,4 +1,6 @@
 import clsx from "clsx";
+import { useLocation } from "react-router-dom";
+import ErrorBoundary from "@/components/common/ErrorBoundary";
 import Sidebar from "./Sidebar";
 import { useUi } from "@/store/ui.store";
 import { useBranding } from "@/hooks/useBranding";
@@ -16,6 +18,7 @@ import { useBranding } from "@/hooks/useBranding";
  * full width and a slim top bar carries the button that opens it.
  */
 export default function AppShell({ children, wide = false }) {
+  const { pathname } = useLocation();
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const setNavOpen = useUi((s) => s.setNavOpen);
   const brand = useBranding();
@@ -53,7 +56,7 @@ export default function AppShell({ children, wide = false }) {
               : "mx-auto max-w-container px-4 py-6 sm:px-8 sm:py-9 lg:px-gutter"
           }
         >
-          {children}
+          <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
         </main>
       </div>
     </div>

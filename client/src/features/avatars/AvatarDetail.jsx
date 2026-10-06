@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { avatarApi } from "@/services/avatar.api";
 import { studioApi } from "@/services/studio.api";
 import Panel from "@/components/layout/Panel";
+import ErrorBoundary from "@/components/common/ErrorBoundary";
 import AvatarSettings from "./AvatarSettings";
 import AvatarChat from "./AvatarChat";
 import AvatarBuild from "./AvatarBuild";
@@ -62,7 +63,9 @@ export default function AvatarDetail() {
         <AvatarBuild avatar={avatar} />
       ) : (
         // Keyed so a different avatar starts from its own values, not the last one's.
-        <AvatarSettings key={avatar._id} avatar={avatar} options={options} onChange={autosave.queue} />
+        <ErrorBoundary compact resetKey={avatar._id}>
+          <AvatarSettings key={avatar._id} avatar={avatar} options={options} onChange={autosave.queue} />
+        </ErrorBoundary>
       )}
     </Panel>
   );
