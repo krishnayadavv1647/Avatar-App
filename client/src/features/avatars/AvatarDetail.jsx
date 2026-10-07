@@ -5,12 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import { avatarApi } from "@/services/avatar.api";
 import { studioApi } from "@/services/studio.api";
 import Panel from "@/components/layout/Panel";
+import Button from "@/components/common/Button";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 import AvatarSettings from "./AvatarSettings";
 import AvatarChat from "./AvatarChat";
 import AvatarBuild from "./AvatarBuild";
 import AvatarMenu from "./AvatarMenu";
-import { useAutosave } from "./useAutosave";
+import { useManualSave } from "./useManualSave";
 
 /**
  * One avatar: talk to it, or change how it looks, sounds and behaves.
@@ -19,8 +20,9 @@ import { useAutosave } from "./useAutosave";
  * edit pencil on the left, Chat / Settings on the right, and the avatar's ⋯
  * menu (AvatarMenu) beside them. Creating an avatar lands here, on Settings.
  *
- * Settings save themselves as they change (see useAutosave), so there is no
- * Save button; the header says when a save is in flight or has failed.
+ * Settings are saved with the Save button in the header (see useManualSave);
+ * nothing is sent until it is pressed, and the header says when there are
+ * unsaved changes or a save has failed.
  */
 const TABS = [
   { id: "chat", label: "Chat", icon: ChatIcon },
@@ -38,7 +40,7 @@ export default function AvatarDetail() {
     queryFn: () => avatarApi.get(id),
   });
   const { data: options } = useQuery({ queryKey: ["studio-options"], queryFn: studioApi.options });
-  const autosave = useAutosave(id);
+  const manual = useManualSave(id);
 
   if (isLoading) return <Panel><p className="p-8 text-text-muted">Loading avatar…</p></Panel>;
   if (error || !avatar) {
@@ -55,24 +57,28 @@ export default function AvatarDetail() {
         avatar={avatar}
         tab={tab}
         onTab={(next) => setParams(next === "settings" ? {} : { tab: next }, { replace: true })}
-        autosave={autosave}
+        manual={manual}
       />
-      {tab === "chat" ? (
-        <AvatarChat avatar={avatar} />
-      ) : tab === "build" ? (
-        <AvatarBuild avatar={avatar} />
-      ) : (
-        // Keyed so a different avatar starts from its own values, not the last one's.
+      {tab === "chat" && <AvatarChat avatar={avatar} />}
+      {tab === "build" && <AvatarBuild avatar={avatar} />}
+      {/* Kept mounted (just hidden) on the other tabs, so unsaved edits are not
+          lost by a glance at Chat. Keyed so a different avatar starts from its
+          own values, not the last one's. */}
+      <div hidden={tab !== "settings"}>
         <ErrorBoundary compact resetKey={avatar._id}>
-          <AvatarSettings key={avatar._id} avatar={avatar} options={options} onChange={autosave.queue} />
+          <AvatarSettings key={avatar._id} avatar={avatar} options={options} onChange={manual.queue} />
         </ErrorBoundary>
-      )}
+      </div>
     </Panel>
   );
 }
 
-function Header({ avatar, tab, onTab, autosave }) {
+function Header({ avatar, tab, onTab, manual }) {
   const navigate = useNavigate();
+  const goBack = () => {
+    if (manual.dirty && !window.confirm("You have unsaved changes. Leave without saving?")) return;
+    navigate("/avatars");
+  };
 
   return (
     // On phones the name gets its own line and the tabs span the width below
@@ -81,22 +87,30 @@ function Header({ avatar, tab, onTab, autosave }) {
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <button
           type="button"
-          onClick={() => navigate("/avatars")}
+          onClick={goBack}
           aria-label="Back to avatars"
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
         >
           <ChevronLeftIcon />
         </button>
-        <EditableName name={avatar.name} onRename={(name) => autosave.queue({ name }, { now: true })} />
+        <EditableName name={avatar.name} onRename={(name) => manual.queue({ name })} />
         <span className="ml-auto sm:hidden">
-          <SaveStatus status={autosave.status} error={autosave.error} />
+          <SaveStatus status={manual.status} dirty={manual.dirty} error={manual.error} />
         </span>
       </div>
 
       <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-3">
         <span className="hidden sm:inline">
-          <SaveStatus status={autosave.status} error={autosave.error} />
+          <SaveStatus status={manual.status} dirty={manual.dirty} error={manual.error} />
         </span>
+        <Button
+          size="sm"
+          onClick={manual.save}
+          disabled={!manual.dirty || manual.status === "saving"}
+          className={tab === "settings" ? undefined : "hidden"}
+        >
+          {manual.status === "saving" ? "Saving…" : "Save"}
+        </Button>
         <div role="tablist" className="flex flex-1 gap-1 rounded-lg border border-border bg-bg p-1 sm:flex-none">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
@@ -185,9 +199,10 @@ function EditableName({ name, onRename }) {
   );
 }
 
-function SaveStatus({ status, error }) {
-  if (status === "idle") return null;
+function SaveStatus({ status, dirty, error }) {
+  if (status === "idle" && !dirty) return null;
   const text = {
+    idle: "Unsaved changes",
     saving: "Saving…",
     saved: "Saved",
     error: `Couldn't save${error?.message ? `: ${error.message}` : ""}`,

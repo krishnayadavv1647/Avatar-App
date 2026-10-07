@@ -7,7 +7,7 @@ import Field from "@/components/forms/Field";
 /**
  * The MCP row: external tool servers the avatar can use during calls.
  *
- * Like the Knowledge Base this skips autosave - adding a server is its own
+ * Like the Knowledge Base this does not wait for Save - adding a server is its own
  * request, and the server connects to it first, so a wrong URL or token comes
  * back as an error here instead of a silent failure on a call.
  */

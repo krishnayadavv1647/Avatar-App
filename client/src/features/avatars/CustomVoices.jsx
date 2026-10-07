@@ -12,7 +12,7 @@ import Button from "@/components/common/Button";
  * an uploaded sample or one recorded in the browser. Voices added earlier by a
  * LiveKit Cloud id still show in the list and still work. Like the Knowledge
  * Base, this row saves through its own requests rather than the avatar's
- * autosave; the voice picker above reads the same query.
+ * Save; the voice picker above reads the same query.
  */
 const KEY = ["custom-voices"];
 

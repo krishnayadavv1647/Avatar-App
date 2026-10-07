@@ -11,13 +11,13 @@ import { useCredits } from "@/features/credits/useCredits";
  * An avatar's settings, laid out like LemonSlice's: a section label with a
  * coloured icon, then a rounded card of rows.
  *
- * Every field saves itself through `onChange` (a partial patch - see
- * useAutosave). Only settings the call pipeline actually honours are here:
+ * Every change is reported through `onChange` (a partial patch) and is saved
+ * when the person presses Save - see useManualSave. Only settings the call pipeline actually honours are here:
  * voice and speed go to our TTS, the model and brief to our language model,
  * aspect ratio, render model and movement prompts to LemonSlice.
  *
  * The form keeps its own draft, seeded once from the avatar, so a save landing
- * mid-sentence never overwrites what is being typed.
+ * never overwrites what is being typed.
  */
 
 const ASPECT_CLASS = { "2x3": "aspect-[2/3]", "9x16": "aspect-[9/16]", "1x1": "aspect-square" };

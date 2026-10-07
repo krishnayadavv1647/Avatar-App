@@ -5,7 +5,7 @@ import { avatarApi } from "@/services/avatar.api";
 /**
  * The Knowledge Base row: documents the avatar can draw on during calls.
  *
- * Unlike the rest of the settings this does not go through autosave - an
+ * Unlike the rest of the settings this does not wait for Save - an
  * upload is its own request, and the list is whatever the server now holds.
  * Only text is kept; the server reads PDF, DOCX, TXT and MD.
  */
