@@ -18,6 +18,7 @@ import { connectMcpTools } from "../integrations/mcp/index.js";
 import { errorDetails, logError } from "../utils/errorLog.js";
 import { applyApiConfigs } from "../modules/admin/system/apiConfig.service.js";
 import { preflight } from "./preflight.js";
+import { waitForCallReady } from "./callReady.js";
 import { isPreviewRoom, runPreview } from "./preview.job.js";
 
 // How long LemonSlice keeps the face up with nothing to say, in a meeting.
@@ -248,6 +249,19 @@ export default defineAgent({
     } catch (err) {
       await failStart(err);
       return;
+    }
+
+    // The clock starts when the call really begins: the caller is in the room
+    // with their microphone and the avatar's face is up. Before that the
+    // person may be answering the browser's microphone prompt, and none of it
+    // is time they were able to talk. A meeting has no caller of ours to wait for.
+    if (!meetingUrl) {
+      const ready = await waitForCallReady(ctx.room);
+      if (finished) return; // the caller left, or the room closed, while waiting
+      if (!ready) {
+        await failStart(new Error("the caller never joined the call (no microphone or no connection)"));
+        return;
+      }
     }
 
     await markActive(conversation);
