@@ -11,6 +11,17 @@ const userSchema = new mongoose.Schema(
     workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: "Workspace", index: true },
     role: { type: String, enum: ["owner", "admin", "member"], default: "owner" },
     lastLoginAt: Date,
+
+    // The profile page. All optional, all the person's own to edit.
+    title: { type: String, trim: true },
+    phone: { type: String, trim: true },
+    // An IANA zone ("Asia/Kolkata"), for showing times the way they read them.
+    timezone: { type: String, trim: true },
+    // Their picture. `photoKey` is where it sits in storage, kept so a new one can replace it.
+    photoUrl: String,
+    photoKey: String,
+    // Who added them to the workspace, for people created from the Team page.
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     // Bumping this invalidates every outstanding refresh token at once, which
     // is how "sign out everywhere" works without a revocation list.
     tokenVersion: { type: Number, default: 0 },

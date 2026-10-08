@@ -19,6 +19,8 @@ import AdminPanel from "@/features/admin/AdminPanel";
 import AdminUser from "@/features/admin/AdminUser";
 import InvitePage from "@/features/invite/InvitePage";
 import NotificationsPage from "@/features/site/NotificationsPage";
+import TeamPage from "@/features/team/TeamPage";
+import ProfilePage from "@/features/profile/ProfilePage";
 
 /**
  * Signed-in pages live inside the shell; sign-in and the avatar creator do not.
@@ -68,6 +70,8 @@ export default function AppRouter() {
       <Route path="/credits" element={app(<CreditsPage />)} />
       <Route path="/connect" element={app(<ConnectAiTools />)} />
       <Route path="/notifications" element={app(<NotificationsPage />)} />
+      <Route path="/team" element={app(<TeamPage />)} />
+      <Route path="/profile" element={app(<ProfilePage />)} />
       <Route path="/conversations" element={app(<ConversationList />)} />
       <Route path="/conversations/:id" element={app(<ConversationDetail />)} />
 

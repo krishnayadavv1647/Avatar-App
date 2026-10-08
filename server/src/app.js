@@ -26,6 +26,8 @@ import inboundMailRoutes from "./modules/comms/webhook.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
 import { authenticate, requireAuth } from "./middleware/auth.js";
 import billingRoutes from "./modules/billing/billing.routes.js";
+import teamRoutes from "./modules/team/team.routes.js";
+import profileRoutes from "./modules/profile/profile.routes.js";
 import stripeWebhook from "./modules/billing/stripe.webhook.js";
 import { impersonationGuard } from "./middleware/impersonation.js";
 import impersonationRoutes from "./modules/impersonation/impersonation.routes.js";
@@ -131,6 +133,9 @@ export function createApp() {
   app.use("/api/oauth", oauthRoutes);
   // The signed-in person's credits.
   app.use("/api/billing", requireAuth, billingRoutes);
+  // The people in the workspace, and the signed-in person's own profile.
+  app.use("/api/team", requireAuth, teamRoutes);
+  app.use("/api/profile", requireAuth, profileRoutes);
   app.use("/api/impersonation", requireAuth, impersonationRoutes);
   app.use("/api/api-keys", requireAuth, apiKeyRoutes);
   // The app as an MCP server. It authenticates with its own API key, not a session.

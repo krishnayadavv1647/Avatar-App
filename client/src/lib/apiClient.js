@@ -148,5 +148,7 @@ export const api = {
   patch: (path, body) => request(path, { method: "PATCH", body }),
   del: (path) => request(path, { method: "DELETE" }),
   upload: (path, form) => request(path, { method: "POST", form }),
+  /** Like `upload`, replacing something (a profile picture). */
+  uploadPut: (path, form) => request(path, { method: "PUT", form }),
   blob: requestBlob,
 };

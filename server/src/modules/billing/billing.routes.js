@@ -5,6 +5,7 @@ import { CreditPack, User } from "../../models/index.js";
 import { creditService } from "./credit.service.js";
 import { canSell, createCheckoutSession } from "../../integrations/payments/stripe.js";
 import { asyncHandler, validate } from "../../middleware/validate.js";
+import { loadActor, requireManager } from "../../middleware/teamRole.js";
 import { resolveWorkspace } from "../../middleware/workspace.js";
 import { env } from "../../config/env.js";
 
@@ -64,6 +65,9 @@ const checkoutLimit = rateLimit({
 /** Starts buying a pack: answers with the Stripe page to send the person to. */
 router.post(
   "/checkout",
+  // Spending the workspace's money is for its owner and admins, not every member.
+  loadActor,
+  requireManager,
   checkoutLimit,
   validate({ body: z.object({ packId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid pack") }) }),
   asyncHandler(async (req, res) => {

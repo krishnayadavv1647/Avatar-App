@@ -155,7 +155,7 @@ async function createAccount({ email, passwordHash, googleId, name, workspaceNam
   return { user, workspace };
 }
 
-function issueTokens(user) {
+export function issueTokens(user) {
   const payload = {
     sub: String(user._id),
     wsp: String(user.workspaceId || ""),
@@ -181,6 +181,7 @@ export const publicUser = (user) => ({
   email: user.email,
   name: user.name,
   role: user.role,
+  photoUrl: user.photoUrl || null,
   workspaceId: user.workspaceId ? String(user.workspaceId) : null,
 });
 

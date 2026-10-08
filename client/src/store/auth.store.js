@@ -80,6 +80,14 @@ export const useAuth = create((set) => ({
     set(next);
   },
 
+  /** Merges changes into the display copy of the user (a saved profile), keeping the session. */
+  setUser: (patch) =>
+    set((s) => {
+      const user = { ...s.user, ...patch };
+      save({ user, accessToken: s.accessToken, refreshToken: s.refreshToken, impersonating: s.impersonating });
+      return { user };
+    }),
+
   /** Replaces only the tokens, after a refresh. */
   setTokens: ({ accessToken, refreshToken }) =>
     set((s) => {

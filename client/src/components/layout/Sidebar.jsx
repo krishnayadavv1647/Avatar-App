@@ -9,6 +9,7 @@ import CreditChip from "@/features/credits/CreditChip";
 import { useBranding } from "@/hooks/useBranding";
 import NotificationPopup from "@/features/site/NotificationPopup";
 import { useNotificationSummary } from "@/features/site/useNotificationSummary";
+import UserAvatar from "@/components/common/UserAvatar";
 
 /**
  * Left navigation, grouped by what you are doing.
@@ -43,6 +44,12 @@ const SECTIONS = [
     ],
   },
 ];
+
+// Shown to the workspace's owner and admins: the people who run it.
+const TEAM_SECTION = {
+  title: "Workspace",
+  items: [{ to: "/team", label: "Team", icon: TeamIcon }],
+};
 
 // Shown only to platform admins (ADMIN_EMAILS on the server).
 const ADMIN_SECTION = {
@@ -90,7 +97,9 @@ export default function Sidebar() {
   const { isAdmin } = useIsAdmin();
   const unreadNotifications = useNotificationSummary().data?.unreadCount || 0;
   const brand = useBranding();
-  const sections = isAdmin ? [...SECTIONS, ADMIN_SECTION] : SECTIONS;
+  const role = useAuth((st) => st.user?.role);
+  const runsWorkspace = role === "owner" || role === "admin";
+  const sections = [...SECTIONS, ...(runsWorkspace ? [TEAM_SECTION] : []), ...(isAdmin ? [ADMIN_SECTION] : [])];
   const toggle = useUi((s) => s.toggleSidebar);
   const navOpen = useUi((s) => s.navOpen);
   const setNavOpen = useUi((s) => s.setNavOpen);
@@ -273,6 +282,17 @@ function AccountCard({ collapsed }) {
           <button
             type="button"
             role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              navigate("/profile");
+            }}
+            className="w-full rounded-sm px-3 py-2 text-left text-ui text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
+          >
+            Profile
+          </button>
+          <button
+            type="button"
+            role="menuitem"
             onClick={signOut}
             className="w-full rounded-sm px-3 py-2 text-left text-ui text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
           >
@@ -292,9 +312,7 @@ function AccountCard({ collapsed }) {
           collapsed ? "justify-center p-1.5" : "px-3 py-2.5",
         )}
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-pink text-ui font-semibold text-text-inverse">
-          {initial}
-        </span>
+        <UserAvatar user={user} size={32} />
         {!collapsed && (
           <>
             <span className="min-w-0 flex-1 text-left">
@@ -384,6 +402,15 @@ function ChatIcon() {
   return (
     <svg {...stroke}>
       <path d="M14 9.5a2 2 0 0 1-2 2H6l-3 2.5v-3H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2Z" />
+    </svg>
+  );
+}
+
+function TeamIcon() {
+  return (
+    <svg {...stroke}>
+      <circle cx="6" cy="5.5" r="2.25" />
+      <path d="M1.75 13c.3-2.2 2-3.5 4.25-3.5s3.95 1.3 4.25 3.5M10.5 3.5a2.25 2.25 0 0 1 0 4.2M12 9.7c1.3.4 2.1 1.5 2.3 3.3" />
     </svg>
   );
 }
