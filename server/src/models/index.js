@@ -18,6 +18,7 @@ export { OAuthClient, OAuthCode, OAuthToken } from "./OAuth.js";
 export { SystemConfig } from "./SystemConfig.js";
 export { ErrorLog } from "./ErrorLog.js";
 export { Invitation } from "./Invitation.js";
+export { TeamInvite } from "./TeamInvite.js";
 export { ApiConfiguration } from "./ApiConfiguration.js";
 export { AppNotification } from "./AppNotification.js";
 export { UserNotificationState } from "./UserNotificationState.js";

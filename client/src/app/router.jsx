@@ -21,6 +21,7 @@ import InvitePage from "@/features/invite/InvitePage";
 import NotificationsPage from "@/features/site/NotificationsPage";
 import TeamPage from "@/features/team/TeamPage";
 import ProfilePage from "@/features/profile/ProfilePage";
+import JoinPage from "@/features/team/JoinPage";
 
 /**
  * Signed-in pages live inside the shell; sign-in and the avatar creator do not.
@@ -45,6 +46,8 @@ export default function AppRouter() {
       {/* Public: the link in an invitation email. Signing in from it returns here. */}
       <Route path="/invite/:token" element={<InvitePage />} />
       <Route path="/embed/:token" element={<TalkPage embedded />} />
+      {/* Public: a workspace invite link. Makes an account inside that workspace. */}
+      <Route path="/join/:token" element={<JoinPage />} />
 
       <Route path="/" element={app(<Home />, { wide: true })} />
       <Route path="/avatars" element={app(<AvatarList />)} />

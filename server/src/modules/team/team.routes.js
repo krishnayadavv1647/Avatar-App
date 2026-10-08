@@ -2,6 +2,7 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { teamService } from "./team.service.js";
+import { EXPIRY_DAYS, MAX_USES, inviteService } from "./invite.service.js";
 import { asyncHandler, validate } from "../../middleware/validate.js";
 import { resolveWorkspace } from "../../middleware/workspace.js";
 import { loadActor, requireManager } from "../../middleware/teamRole.js";
@@ -81,6 +82,41 @@ router.delete(
   validate({ params: z.object({ id }) }),
   asyncHandler(async (req, res) => {
     res.json(await teamService.remove(req, req.params.id));
+  }),
+);
+
+// ---- invite links --------------------------------------------------------------
+
+router.get(
+  "/invites",
+  asyncHandler(async (req, res) => {
+    res.json({ invites: await inviteService.list(req.workspace) });
+  }),
+);
+
+router.post(
+  "/invites",
+  writeLimit,
+  validate({
+    body: z.object({
+      role: z.enum(["admin", "member"]).default("member"),
+      expiresInDays: z.coerce.number().int().refine((n) => EXPIRY_DAYS.includes(n), `Choose ${EXPIRY_DAYS.join(", ")} days`).default(7),
+      maxUses: z.coerce.number().int().min(1).max(MAX_USES).default(1),
+      // Optional: a link that works for one address only.
+      email: z.string().trim().email("Enter a valid email").max(200).optional(),
+    }),
+  }),
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await inviteService.create(req, req.body));
+  }),
+);
+
+router.delete(
+  "/invites/:id",
+  writeLimit,
+  validate({ params: z.object({ id }) }),
+  asyncHandler(async (req, res) => {
+    res.json(await inviteService.revoke(req, req.params.id));
   }),
 );
 

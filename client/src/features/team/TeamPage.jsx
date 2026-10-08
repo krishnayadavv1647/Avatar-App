@@ -10,6 +10,7 @@ import { Badge, Select } from "@/components/forms/controls";
 import { toast } from "@/components/feedback/Toast";
 import AddMemberDialog from "./AddMemberDialog";
 import ResetPasswordDialog from "./ResetPasswordDialog";
+import InviteLinkDialog from "./InviteLinkDialog";
 
 /**
  * The people in this workspace. They share its avatars, plan and credits; what
@@ -26,10 +27,23 @@ export default function TeamPage() {
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery({ queryKey: ["team"], queryFn: teamApi.list, retry: false });
   const [adding, setAdding] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const [resetting, setResetting] = useState(null);
   const [removing, setRemoving] = useState(null);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["team"] });
+  // Only managers get here (the page above refuses everyone else), so this never asks for what it may not have.
+  const { data: invitesData } = useQuery({ queryKey: ["team-invites"], queryFn: teamApi.invites, enabled: Boolean(data) });
+  const refreshInvites = () => queryClient.invalidateQueries({ queryKey: ["team-invites"] });
+
+  const revokeInvite = useMutation({
+    mutationFn: (id) => teamApi.revokeInvite(id),
+    onSuccess: () => {
+      toast.success("Invite link cancelled");
+      refreshInvites();
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const changeRole = useMutation({
     mutationFn: ({ id, role }) => teamApi.update(id, { role }),
@@ -73,7 +87,14 @@ export default function TeamPage() {
       <PageHeader
         title="Team"
         description="Add the people you work with. They sign in with their own email and password and share this workspace's avatars and credits."
-        action={<Button onClick={() => setAdding(true)}>Add user</Button>}
+        action={
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="secondary" onClick={() => setInviting(true)}>
+              Invite by link
+            </Button>
+            <Button onClick={() => setAdding(true)}>Add user</Button>
+          </div>
+        }
       />
 
       <Card flush>
@@ -130,6 +151,33 @@ export default function TeamPage() {
         </ul>
       </Card>
 
+      {invitesData?.invites?.length > 0 && (
+        <Card title="Open invite links" className="mt-4">
+          <p className="mt-2 text-ui text-text-muted">
+            Anyone with one of these can create an account here. Cancel a link to stop it working at once.
+          </p>
+          <ul className="mt-3 divide-y divide-border rounded-lg border border-border bg-bg">
+            {invitesData.invites.map((inv) => (
+              <li key={inv.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+                <div className="min-w-0 flex-1 basis-48">
+                  <p className="text-ui font-medium">
+                    Joins as {inv.role}
+                    {inv.email ? ` · only ${inv.email}` : ""}
+                  </p>
+                  <p className="text-label text-text-faint">
+                    {inv.uses} of {inv.maxUses} used · expires {when(inv.expiresAt)}
+                    {inv.createdBy ? ` · made by ${inv.createdBy}` : ""}
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => revokeInvite.mutate(inv.id)} disabled={revokeInvite.isPending && revokeInvite.variables === inv.id}>
+                  Cancel link
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <Card title="What each role can do" className="mt-4">
         <dl className="mt-3 grid gap-4 text-ui sm:grid-cols-3">
           <div>
@@ -153,6 +201,7 @@ export default function TeamPage() {
         onClose={() => setAdding(false)}
         onCreated={refresh}
       />
+      <InviteLinkDialog open={inviting} roles={rolesICanGive} onClose={() => setInviting(false)} onCreated={refreshInvites} />
       <ResetPasswordDialog member={resetting} onClose={() => setResetting(null)} />
       <ConfirmDialog
         open={Boolean(removing)}
