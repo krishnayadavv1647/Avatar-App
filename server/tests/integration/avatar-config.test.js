@@ -7,6 +7,7 @@ import test, { after, afterEach, before, describe } from "node:test";
 import assert from "node:assert/strict";
 import { env } from "../../src/config/env.js";
 import { dominantScript } from "../../src/modules/avatars/effectiveConfig.js";
+import { instructionsFor } from "../../src/agent/instructions.js";
 import { signUp, startTestApp } from "../helpers.js";
 
 let app;
@@ -150,5 +151,28 @@ describe("dominantScript", () => {
     assert.equal(dominantScript("नमस्ते आप कैसे हैं आज"), "devanagari");
     assert.equal(dominantScript("Hi"), null);
     assert.equal(dominantScript("Hello мирр hello мирр"), null);
+  });
+});
+
+describe("the language setting reaches the model", () => {
+  const avatar = (language, extra = {}) => ({
+    name: "Marcus",
+    persona: { systemPrompt: "You speak for a studio.", language, ...extra },
+  });
+
+  test("a call is told which language to speak, even when the greeting or documents are in another", () => {
+    const text = instructionsFor({
+      ...avatar("en", { greeting: "Здравствуйте! Вы связались со студией." }),
+      documents: [{ name: "Fact sheet", text: "Мы создаём видео для брендов." }],
+    });
+    assert.match(text, /Speak English\./);
+    assert.match(text, /first greeting as well/);
+    // The language line comes before the reference material, so it is not drowned by it.
+    assert.ok(text.indexOf("Speak English") < text.indexOf("Fact sheet"));
+  });
+
+  test("follows the setting, and says nothing for a language the app does not list", () => {
+    assert.match(instructionsFor(avatar("hi")), /Speak Hindi\./);
+    assert.doesNotMatch(instructionsFor(avatar("xx")), /Speak /);
   });
 });

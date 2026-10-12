@@ -102,6 +102,7 @@ describe("POST /api/avatars/:id/website", () => {
     const sent = JSON.stringify(call.body);
     assert.match(sent, /sourdough loaf costs 120 rupees/i);
     assert.match(sent, /untrusted/i);
+    assert.match(sent, /Avatar language: English/);
     assert.ok(!sent.includes("steal()"));
 
     const doc = await KnowledgeDocument.findOne({ avatarId: id });

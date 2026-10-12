@@ -1,5 +1,6 @@
 import { RECOMMENDED_PROMPT } from "../ai/prompts/personality.js";
 import { knowledgePrompt } from "../ai/knowledge.js";
+import { LANGUAGES } from "../ai/catalog.js";
 
 /**
  * What a call tells the language model about itself: the brief, who it is
@@ -20,6 +21,18 @@ export function instructionsFor(avatar, conversation = {}) {
   // "Default personality" on the settings page: spoken-conversation guidance
   // added after the persona's own brief, never instead of it.
   const parts = [avatar.persona?.useDefaultPrompt ? `${own}\n\n${RECOMMENDED_PROMPT}` : own];
+
+  // The language setting drives speech recognition and the voice; without this
+  // line nothing told the model which language to answer in, so a greeting or
+  // fact sheet in another language pulled the whole call into that language.
+  const language = LANGUAGES.find((l) => l.code === avatar.persona?.language);
+  if (language) {
+    parts.push(
+      `Speak ${language.label}. This applies to your first greeting as well, even if the instructions or reference ` +
+        `material are written in another language. Only if the caller clearly speaks to you in another language, ` +
+        `answer in theirs.`,
+    );
+  }
 
   // Someone arriving by share link typed their name before joining. An
   // interviewer that knows who it is talking to sounds like one.

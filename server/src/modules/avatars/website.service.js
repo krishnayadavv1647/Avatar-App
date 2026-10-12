@@ -6,6 +6,7 @@ import { chat } from "../../integrations/llm/kieChat.js";
 import { readSite } from "../../integrations/web/siteReader.js";
 import { errorDetails, logError } from "../../utils/errorLog.js";
 import { logger } from "../../config/logger.js";
+import { LANGUAGES } from "../../ai/catalog.js";
 
 /**
  * "Learn from a website": give an avatar a business's site and it talks about
@@ -31,7 +32,7 @@ Reply with one JSON object and nothing else, with these keys:
 - "businessName": the business's name, as the site writes it.
 - "knowledge": a fact sheet in plain markdown, under 12000 characters, written in the site's own language. Sections where the site gives the information: About, What they offer (products or services), Prices (only figures the site actually states), Opening hours and location, Contact (phone, email, address), Frequently asked questions, Anything a customer should know. Leave out a section rather than guess. Never invent a fact, price, name or number.
 - "systemPrompt": instructions for the avatar, under 2500 characters, in English, written in the second person. It speaks aloud as a friendly, knowledgeable representative of this business: short natural spoken sentences (two or three), no lists or markdown, answers only from the fact sheet, says plainly that it does not know when the answer is not there and offers to take the person's name and contact details, never invents prices or promises, and stays on the subject of the business.
-- "greeting": the first thing the avatar says, one or two short sentences in the site's language, naming the business.`;
+- "greeting": the first thing the avatar says, one or two short sentences, naming the business, written in the language named under "Avatar language" in the user message (not necessarily the site's language).`;
 
 const fail = (statusCode, message) => Object.assign(new Error(message), { statusCode });
 
@@ -66,6 +67,7 @@ export const websiteService = {
     if (!avatar) throw fail(404, "Avatar not found");
 
     const site = await readSite(url);
+    const language = LANGUAGES.find((l) => l.code === (avatar.personaId?.language || "en"))?.label || "English";
 
     // Learning the same site again refreshes its document instead of adding another.
     const name = `Website: ${site.host}`;
@@ -80,7 +82,7 @@ export const websiteService = {
     let briefing;
     try {
       briefing = parseBriefing(
-        await chat({ system: SYSTEM, user: `Website: ${site.host}\n\n<website_text>\n${material}\n</website_text>` }),
+        await chat({ system: SYSTEM, user: `Avatar language: ${language}\nWebsite: ${site.host}\n\n<website_text>\n${material}\n</website_text>` }),
       );
     } catch (err) {
       if (err.report) {
