@@ -15,6 +15,7 @@ import providerWebhooks from "./webhooks/provider.webhook.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import analyticsRoutes from "./modules/analytics/analytics.routes.js";
 import conversationRoutes from "./modules/conversations/conversation.routes.js";
+import leadRoutes from "./modules/leads/lead.routes.js";
 import linkRoutes from "./modules/links/link.routes.js";
 import apiKeyRoutes from "./modules/apiKeys/apiKey.routes.js";
 import mcpRoutes from "./modules/mcp/mcp.routes.js";
@@ -123,6 +124,7 @@ export function createApp() {
   app.use("/api/voices", requireAuth, voiceRoutes);
   app.use("/api/analytics", requireAuth, analyticsRoutes);
   app.use("/api/conversations", requireAuth, conversationRoutes);
+  app.use("/api/leads", requireAuth, leadRoutes);
   app.use("/.well-known", wellKnownRoutes);
   // Public: the app's name and branding, and the invitation link a person opens before they have an account.
   app.use("/api/config", siteConfigRoutes);

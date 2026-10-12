@@ -10,8 +10,8 @@ import { roomService } from "../modules/rooms/room.service.js";
 import { getRenderer } from "./renderers/registry.js";
 import { buildPipelineConfig, logPipelineMode } from "./pipeline.js";
 import { createTranscriptRecorder } from "./transcript.recorder.js";
-import { RECOMMENDED_PROMPT } from "../ai/prompts/personality.js";
-import { knowledgePrompt } from "../ai/knowledge.js";
+import { instructionsFor } from "./instructions.js";
+import { buildCallTools } from "./callTools.js";
 import { knowledgeService } from "../modules/avatars/knowledge.service.js";
 import { mcpService } from "../modules/avatars/mcp.service.js";
 import { connectMcpTools } from "../integrations/mcp/index.js";
@@ -236,11 +236,14 @@ export default defineAgent({
     const servers = await mcpService.forCall(avatar._id).catch(() => []);
     if (servers.length) mcp = await connectMcpTools(servers);
 
+    // The avatar's own MCP servers, plus the lead and handoff tools its owner switched on.
+    const allTools = [...(mcp?.tools || []), ...buildCallTools({ avatar, conversation })];
+
     try {
       await session.start({
         agent: new voice.Agent({
           instructions: instructionsFor(avatar, conversation),
-          ...(mcp?.tools.length && { tools: mcp.tools }),
+          ...(allTools.length && { tools: allTools }),
         }),
         room: ctx.room,
         // In a meeting, audio comes from and goes to the meeting, not our room.
@@ -317,36 +320,6 @@ async function resolveJob(ctx) {
     conversation,
     avatar: { ...avatar, persona: avatar.personaId, voice: avatar.voiceId, documents },
   };
-}
-
-function instructionsFor(avatar, conversation) {
-  const own =
-    avatar.persona?.systemPrompt ||
-    `You are ${avatar.name}, a friendly AI avatar speaking with someone over video. ` +
-      `Keep replies to two or three sentences.`;
-  // "Default personality" on the settings page: spoken-conversation guidance
-  // added after the persona's own brief, never instead of it.
-  const parts = [avatar.persona?.useDefaultPrompt ? `${own}\n\n${RECOMMENDED_PROMPT}` : own];
-
-  // Someone arriving by share link typed their name before joining. An
-  // interviewer that knows who it is talking to sounds like one.
-  const guest = conversation.guest?.name;
-  if (guest) parts.push(`The person on this call is called ${guest}. Use their name naturally.`);
-
-  if (conversation.meetingUrl) {
-    parts.push(
-      "You have joined a video meeting as one of its participants. Several people may be " +
-        "talking. Reply when someone speaks to you or asks a question, keep answers short, " +
-        "and do not interrupt a conversation between others.",
-    );
-  }
-
-  // The knowledge base goes last: reference material, after who the avatar is
-  // and who it is talking to.
-  const knowledge = knowledgePrompt(avatar.documents);
-  if (knowledge) parts.push(knowledge);
-
-  return parts.join("\n\n");
 }
 
 async function markActive(conversation) {

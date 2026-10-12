@@ -43,6 +43,8 @@ export default function AvatarSettings({ avatar, options, onChange }) {
       language: persona.language || "en",
       systemPrompt: persona.systemPrompt || "",
       useDefaultPrompt: Boolean(persona.useDefaultPrompt),
+      captureLeads: Boolean(persona.captureLeads),
+      humanHandoff: Boolean(persona.humanHandoff),
       llmModel: persona.llmModel || "",
       motionPrompt: persona.motionPrompt || "",
       idlePrompt: persona.idlePrompt || "",
@@ -194,6 +196,26 @@ export default function AvatarSettings({ avatar, options, onChange }) {
               checked={p.useDefaultPrompt}
               label="Default personality"
               onChange={(useDefaultPrompt) => setPersona({ useDefaultPrompt }, { now: true })}
+            />
+          </Row>
+          <Row
+            title="Capture leads"
+            description="Lets the avatar save a caller's name, email or phone and what they need, once they agree. See them under Leads."
+          >
+            <Toggle
+              checked={p.captureLeads}
+              label="Capture leads"
+              onChange={(captureLeads) => setPersona({ captureLeads }, { now: true })}
+            />
+          </Row>
+          <Row
+            title="Human handoff"
+            description="When a caller asks for a person, the request is recorded and you are emailed. It does not transfer the call live."
+          >
+            <Toggle
+              checked={p.humanHandoff}
+              label="Human handoff"
+              onChange={(humanHandoff) => setPersona({ humanHandoff }, { now: true })}
             />
           </Row>
           <Row

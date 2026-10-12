@@ -98,6 +98,25 @@ function normalise(text) {
 }
 
 /**
+ * Which documents reach a call, mirroring knowledgePrompt: oldest first until
+ * the budget runs out. "partial" is the one cut at the limit, "none" is left out.
+ * Takes `{ name, chars }` so a listing need not load every document's text.
+ *
+ * @returns {Array<{ name: string, chars: number, reachesCalls: "full" | "partial" | "none" }>}
+ */
+export function budgetReport(documents, budget = CONTEXT_BUDGET_CHARS) {
+  let remaining = budget;
+  return (documents || []).map((doc) => {
+    const chars = doc.chars ?? doc.text?.length ?? 0;
+    let reachesCalls = "full";
+    if (remaining <= 0) reachesCalls = "none";
+    else if (chars > remaining) reachesCalls = "partial";
+    remaining -= chars;
+    return { name: doc.name, chars, reachesCalls };
+  });
+}
+
+/**
  * The instructions block for a call, or "" with no documents.
  *
  * Documents go in oldest first until the budget runs out; the one that

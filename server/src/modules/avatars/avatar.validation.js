@@ -42,6 +42,16 @@ export const avatarValidation = {
       })
       .strict(),
   },
+  testReply: {
+    params: z.object({ id: objectId }),
+    body: z.object({
+      message: z.string().trim().min(1, "Say something to the avatar").max(2000),
+      history: z
+        .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().trim().min(1).max(2000) }))
+        .max(24)
+        .optional(),
+    }),
+  },
   learnWebsite: {
     params: z.object({ id: objectId }),
     body: z.object({

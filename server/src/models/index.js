@@ -31,3 +31,4 @@ export { ScheduledEmail } from "./ScheduledEmail.js";
 export { SupportEmail } from "./SupportEmail.js";
 export { ImageTask } from "./ImageTask.js";
 export { CreditAccount, CreditTransaction, CreditPack } from "./Credits.js";
+export { Lead, Handoff } from "./Lead.js";

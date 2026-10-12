@@ -1,5 +1,7 @@
 import { avatarService } from "./avatar.service.js";
 import { knowledgeService } from "./knowledge.service.js";
+import { testService } from "./test.service.js";
+import { describeAvatar } from "./effectiveConfig.js";
 import { websiteService } from "./website.service.js";
 import { mcpService } from "./mcp.service.js";
 import { previewService } from "./preview.service.js";
@@ -15,6 +17,11 @@ export const avatarController = {
 
   get: asyncHandler(async (req, res) => {
     res.json({ avatar: await avatarService.get(req.workspace._id, req.params.id) });
+  }),
+
+  /** Stored settings, what a call will really do with them, and warnings. */
+  config: asyncHandler(async (req, res) => {
+    res.json(await describeAvatar(await avatarService.get(req.workspace._id, req.params.id)));
   }),
 
   update: asyncHandler(async (req, res) => {
@@ -43,6 +50,14 @@ export const avatarController = {
     res.status(201).json(
       await websiteService.learn(req.workspace._id, req.params.id, req.body, req.auth?.userId),
     );
+  }),
+
+  getDocument: asyncHandler(async (req, res) => {
+    res.json({ document: await knowledgeService.get(req.workspace._id, req.params.id, req.params.docId) });
+  }),
+
+  testReply: asyncHandler(async (req, res) => {
+    res.json(await testService.reply(req.workspace._id, req.params.id, req.body));
   }),
 
   removeDocument: asyncHandler(async (req, res) => {

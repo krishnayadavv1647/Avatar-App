@@ -13,6 +13,12 @@ export async function startTestApp({ seed: runSeed = true } = {}) {
   await mongoose.connect(mongod.getUri());
 
   const { createApp } = await import("../src/app.js");
+  // Indexes are built in the background after a model is registered, and the
+  // unique ones are what make grants and charges idempotent. Wait for them, or
+  // a request that arrives first (credits are granted when first read) would
+  // run without them and a test would see a double grant that cannot happen
+  // in a server that has been up for more than a moment.
+  await Promise.all(Object.values(mongoose.models).map((model) => model.init()));
   const seeded = runSeed ? await (await import("../src/scripts/seed.js")).seed() : null;
 
   const app = createApp();

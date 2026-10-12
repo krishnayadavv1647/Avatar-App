@@ -67,6 +67,8 @@ async function createPersona({ workspace, name, behaviour = {}, gender }) {
     voiceSpeed,
     useDefaultPrompt,
     llmModel,
+    captureLeads,
+    humanHandoff,
   } = behaviour;
 
   return Persona.create({
@@ -84,6 +86,8 @@ async function createPersona({ workspace, name, behaviour = {}, gender }) {
     voiceSpeed: voiceSpeed ?? undefined,
     useDefaultPrompt: useDefaultPrompt ?? undefined,
     llmModel: llmModel?.trim() || undefined,
+    captureLeads: captureLeads ?? undefined,
+    humanHandoff: humanHandoff ?? undefined,
   });
 }
 

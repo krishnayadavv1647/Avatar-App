@@ -13,6 +13,7 @@ import OAuthConsent from "@/features/connect/OAuthConsent";
 import ConnectAiTools from "@/features/connect/ConnectAiTools";
 import CreditsPage from "@/features/credits/CreditsPage";
 import ConversationList from "@/features/conversations/ConversationList";
+import LeadsPage from "@/features/leads/LeadsPage";
 import ConversationDetail from "@/features/conversations/ConversationDetail";
 import DesignPreview from "@/features/_design/DesignPreview";
 import AdminPanel from "@/features/admin/AdminPanel";
@@ -77,6 +78,7 @@ export default function AppRouter() {
       <Route path="/profile" element={app(<ProfilePage />)} />
       <Route path="/conversations" element={app(<ConversationList />)} />
       <Route path="/conversations/:id" element={app(<ConversationDetail />)} />
+      <Route path="/leads" element={app(<LeadsPage />)} />
 
       {/* Platform admins only; the pages check, and the API checks again. */}
       <Route path="/admin" element={app(<AdminPanel />, { wide: true })} />

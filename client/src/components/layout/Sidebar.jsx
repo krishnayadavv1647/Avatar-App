@@ -38,6 +38,7 @@ const SECTIONS = [
     title: "My work",
     items: [
       { to: "/conversations", label: "Conversations", icon: ChatIcon },
+      { to: "/leads", label: "Leads", icon: TeamIcon },
       { to: "/analytics", label: "Usage", icon: ChartIcon },
       { to: "/connect", label: "AI tools", icon: PlugIcon },
       { to: "/notifications", label: "Notifications", icon: BellIcon, badge: true },

@@ -29,12 +29,23 @@ const learnLimiter = rateLimit({
   message: { error: { message: "You have learned a lot of websites this hour. Try again later." } },
 });
 
+// A text test costs a model call; bounded per person.
+const testLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => String(req.auth?.userId || ipKeyGenerator(req.ip)),
+  message: { error: { message: "That is a lot of test messages. Try again later." } },
+});
+
 const router = Router();
 
 router.use(resolveWorkspace);
 
 router.get("/", avatarController.list);
 router.get("/:id", validate(avatarValidation.byId), avatarController.get);
+router.get("/:id/config", validate(avatarValidation.byId), avatarController.config);
 router.patch("/:id", validate(avatarValidation.update), avatarController.update);
 router.delete("/:id", validate(avatarValidation.byId), avatarController.remove);
 
@@ -51,6 +62,13 @@ router.post(
   learnLimiter,
   validate(avatarValidation.learnWebsite),
   avatarController.learnWebsite,
+);
+router.get("/:id/documents/:docId", validate(avatarValidation.document), avatarController.getDocument);
+router.post(
+  "/:id/test",
+  testLimiter,
+  validate(avatarValidation.testReply),
+  avatarController.testReply,
 );
 router.delete(
   "/:id/documents/:docId",

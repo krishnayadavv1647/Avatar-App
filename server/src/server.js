@@ -1,3 +1,4 @@
+import { CreditAccount, CreditTransaction, UsageLedger } from "./models/index.js";
 import { createApp } from "./app.js";
 import { connectDb } from "./config/db.js";
 import { startKeepAlive } from "./config/keepAlive.js";
@@ -44,6 +45,13 @@ async function connectWithRetry() {
 
 async function main() {
   await connectWithRetry();
+
+  // The unique indexes that make a grant or a charge happen once must exist
+  // before the first request, not merely be on their way. Only those models are
+  // waited for: initialising every model costs seconds against a remote database.
+  await Promise.all(
+    [CreditTransaction, CreditAccount, UsageLedger].map((model) => model.init()),
+  ).catch((err) => logger.warn({ err: err.message }, "could not confirm database indexes"));
 
   // Vendor keys saved in the admin panel win over the environment's. Applied
   // before the first request so nothing runs on a stale key, and a failure here

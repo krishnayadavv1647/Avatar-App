@@ -6,7 +6,12 @@ import { behaviourFields, gender } from "../studio/studio.validation.js";
 import { FACES, FACE_LIBRARY } from "../../avatar/faceLibrary.js";
 import { LANGUAGES, llmModels, voicesForTts } from "../../ai/catalog.js";
 import { assertSafeUrl } from "../../integrations/mcp/index.js";
+import { describeAvatar } from "../avatars/effectiveConfig.js";
 import { knowledgeService } from "../avatars/knowledge.service.js";
+import { testService } from "../avatars/test.service.js";
+import { TEMPLATES, findTemplate } from "../../ai/templates.js";
+import { mcpService } from "../avatars/mcp.service.js";
+import { leadService } from "../leads/lead.service.js";
 import { websiteService } from "../avatars/website.service.js";
 import { voiceService } from "../voices/voice.service.js";
 import { imageGenService } from "../studio/imagegen.service.js";
@@ -75,6 +80,9 @@ const ownVoice = (v) => ({
   language: v.language || null,
 });
 
+/** The avatar plus what is stored, what a call will really do with it, and what looks off. */
+const detailed = async (a) => ({ ...slim(a), ...(await describeAvatar(a)) });
+
 const json = (value) => ({ content: [{ type: "text", text: JSON.stringify(value, null, 2) }] });
 
 /** A thrown error the client should read, not a crash. */
@@ -129,6 +137,21 @@ async function fetchSample(raw) {
   return { buffer, mimetype, size: buffer.length, originalname: new URL(raw).pathname.split("/").pop() || "sample" };
 }
 
+const TEMPLATE_FACE_MISSING = Symbol("template face missing");
+
+/**
+ * A template's face is its picture on the website (/presets/<id>.jpg). If the
+ * site is not reachable from here - or has not been deployed with the pictures
+ * yet - the avatar still gets made, with a Library face of the same gender.
+ */
+async function templateFace(template) {
+  try {
+    return await fetchPhoto(`${env.clientOrigin.replace(/\/$/, "")}/presets/${template.id}.jpg`);
+  } catch {
+    return TEMPLATE_FACE_MISSING;
+  }
+}
+
 /** Makes a face from a description with the image service and waits for it (about half a minute). */
 async function generateFace({ workspace, userId, prompt }) {
   const framing =
@@ -161,11 +184,14 @@ export function createAvatarMcpServer({ workspace, userId }) {
   server.registerTool(
     "get_avatar",
     {
-      description: "Get one avatar's details, including its persona (prompt, greeting, voice, model).",
+      description:
+        "Get one avatar's details: its persona, every stored setting (`settings`), what a call will actually do " +
+        "with them (`effective`: model, voice actually spoken, speed/temperature applied or not, call limit, " +
+        "credits per minute, knowledge size) and `warnings` for anything that looks wrong or is being ignored.",
       inputSchema: { avatarId: objectId },
       annotations: { readOnlyHint: true },
     },
-    run(async ({ avatarId }) => slim(await avatarService.get(ws, avatarId))),
+    run(async ({ avatarId }) => detailed(await avatarService.get(ws, avatarId))),
   );
 
   server.registerTool(
@@ -237,14 +263,17 @@ export function createAvatarMcpServer({ workspace, userId }) {
     "create_avatar",
     {
       description:
-        "Create an avatar, optionally finished and ready to deploy in one call. Face: exactly one of faceId (a library " +
-        "face from list_options), photoUrl (a public https link to a portrait photo, JPEG/PNG/WebP up to 10 MB) or " +
-        "facePrompt (describe the person and one is generated, takes about half a minute). Use persona to set how it " +
+        "Create an avatar, optionally finished and ready to deploy in one call. Start from a ready-made `template` " +
+        "(ids from list_templates: its face, instructions and greeting; anything you pass in persona overrides it), or " +
+        "choose a face: exactly one of faceId (a library face from list_options), photoUrl (a public https link to a " +
+        "portrait photo, JPEG/PNG/WebP up to 10 MB) or facePrompt (describe the person and one is generated, takes " +
+        "about half a minute). Use persona to set how it " +
         "talks (systemPrompt, greeting, voice from list_voices, language, llmModel). Give websiteUrl to have it read that " +
         "website and learn the business (fact sheet in its knowledge, and - unless you gave your own persona.systemPrompt - " +
         "its instructions and greeting). Set publish to turn on the public link and get the embed code.",
       inputSchema: {
         name: z.string().trim().min(1).max(80),
+        template: z.string().trim().max(40).optional(),
         faceId: z.string().regex(/^face_[fm]\d{2}$/).optional(),
         photoUrl: z.string().url().optional(),
         facePrompt: z.string().trim().min(10).max(600).optional(),
@@ -254,21 +283,49 @@ export function createAvatarMcpServer({ workspace, userId }) {
         publish: z.boolean().optional(),
       },
     },
-    run(async ({ name, faceId, photoUrl, facePrompt, gender: g, persona, websiteUrl, publish }) => {
-      if ([faceId, photoUrl, facePrompt].filter(Boolean).length !== 1) {
-        throw Object.assign(new Error("Provide exactly one of faceId, photoUrl or facePrompt"), { statusCode: 422 });
+    run(async ({ name, template: templateId, faceId, photoUrl, facePrompt, gender: g, persona, websiteUrl, publish }) => {
+      const template = templateId ? findTemplate(templateId) : null;
+      if (templateId && !template) {
+        throw Object.assign(new Error(`Unknown template "${templateId}". Use list_templates for the ids.`), { statusCode: 422 });
       }
-      const common = { workspace, name, gender: g, behaviour: persona, userId };
-      const created = faceId
-        ? await studioService.createFromStock({
-            ...common,
-            providerId: FACE_LIBRARY,
-            providerAvatarId: faceId,
-          })
-        : await studioService.createFromPhoto({
-            ...common,
-            file: photoUrl ? await fetchPhoto(photoUrl) : await generateFace({ workspace, userId, prompt: facePrompt }),
-          });
+      const faces = [faceId, photoUrl, facePrompt].filter(Boolean).length;
+      if (faces > 1 || (faces === 0 && !template)) {
+        throw Object.assign(
+          new Error("Provide exactly one of faceId, photoUrl or facePrompt (or a template, which brings its own face)"),
+          { statusCode: 422 },
+        );
+      }
+
+      // A template's brief is the base; whatever was passed explicitly wins.
+      const behaviour = template
+        ? {
+            systemPrompt: template.systemPrompt,
+            greeting: template.greeting,
+            motionPrompt: template.motionPrompt,
+            temperature: template.temperature,
+            ...persona,
+          }
+        : persona;
+      const common = { workspace, name, gender: g || template?.gender, behaviour, userId };
+
+      let created;
+      if (faceId) {
+        created = await studioService.createFromStock({ ...common, providerId: FACE_LIBRARY, providerAvatarId: faceId });
+      } else {
+        const file = photoUrl
+          ? await fetchPhoto(photoUrl)
+          : facePrompt
+            ? await generateFace({ workspace, userId, prompt: facePrompt })
+            : await templateFace(template);
+        created =
+          file === TEMPLATE_FACE_MISSING
+            ? await studioService.createFromStock({
+                ...common,
+                providerId: FACE_LIBRARY,
+                providerAvatarId: (FACES.find((f) => f.gender === template.gender) || FACES[0]).id,
+              })
+            : await studioService.createFromPhoto({ ...common, file });
+      }
 
       const result = {};
       if (websiteUrl) {
@@ -287,7 +344,7 @@ export function createAvatarMcpServer({ workspace, userId }) {
       }
       if (publish) result.deployment = deployment(created._id, await avatarService.setShare(ws, created._id, { enabled: true }));
 
-      return { ...slim(await avatarService.get(ws, created._id)), ...result };
+      return { ...(await detailed(await avatarService.get(ws, created._id))), ...result };
     }),
   );
 
@@ -312,7 +369,7 @@ export function createAvatarMcpServer({ workspace, userId }) {
       },
     },
     run(async ({ avatarId, name, gender: g, persona, render }) =>
-      slim(await avatarService.update(ws, avatarId, { name, gender: g, persona, render })),
+      detailed(await avatarService.update(ws, avatarId, { name, gender: g, persona, render })),
     ),
   );
 
@@ -324,6 +381,38 @@ export function createAvatarMcpServer({ workspace, userId }) {
       annotations: { readOnlyHint: true },
     },
     run(async ({ avatarId }) => knowledgeService.list(ws, avatarId)),
+  );
+
+  server.registerTool(
+    "get_knowledge",
+    {
+      description:
+        "Read one knowledge document's stored text, and whether it fully reaches calls (`reachesCalls`: full, partial " +
+        "when cut at the length budget, or none when left out). Ids come from list_knowledge.",
+      inputSchema: { avatarId: objectId, documentId: objectId },
+      annotations: { readOnlyHint: true },
+    },
+    run(async ({ avatarId, documentId }) => knowledgeService.get(ws, avatarId, documentId)),
+  );
+
+  server.registerTool(
+    "test_avatar_reply",
+    {
+      description:
+        "Ask an avatar something in text and get the answer it would give, using its real instructions and knowledge, " +
+        "with no call, voice or video and no call credits. `model.exact` says whether the same model answered or a " +
+        "stand-in did (hosted models run only inside a live call). Use it to check an avatar before sharing it. " +
+        "Pass `history` to continue a conversation. Voice quality, speech recognition and video need a live call.",
+      inputSchema: {
+        avatarId: objectId,
+        message: z.string().trim().min(1).max(2000),
+        history: z
+          .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().trim().min(1).max(2000) }))
+          .max(24)
+          .optional(),
+      },
+    },
+    run(async ({ avatarId, message, history }) => testService.reply(ws, avatarId, { message, history })),
   );
 
   server.registerTool(
@@ -370,6 +459,130 @@ export function createAvatarMcpServer({ workspace, userId }) {
       annotations: { destructiveHint: true },
     },
     run(async ({ avatarId, documentId }) => knowledgeService.remove(ws, avatarId, documentId)),
+  );
+
+  server.registerTool(
+    "list_leads",
+    {
+      description:
+        "Contact details callers gave the workspace's avatars (needs captureLeads on in the avatar's persona): name, " +
+        "email, phone, requirement, status, number of calls. Filter by avatarId or status (new, contacted, closed).",
+      inputSchema: {
+        avatarId: objectId.optional(),
+        status: z.enum(["new", "contacted", "closed"]).optional(),
+        limit: z.number().int().min(1).max(500).optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    run(async (args) => leadService.list(ws, args)),
+  );
+
+  server.registerTool(
+    "list_handoff_requests",
+    {
+      description:
+        "Callers who asked for a person (needs humanHandoff on in the avatar's persona): who, how to reach them, why, " +
+        "and whether the owner was emailed. Filter by status (open, done).",
+      inputSchema: { status: z.enum(["open", "done"]).optional(), limit: z.number().int().min(1).max(500).optional() },
+      annotations: { readOnlyHint: true },
+    },
+    run(async (args) => leadService.listHandoffs(ws, args)),
+  );
+
+  server.registerTool(
+    "list_templates",
+    {
+      description:
+        "Ready-made avatar templates (receptionist, sales rep, support agent, tutor, team manager, ...). Pass a " +
+        "template id to create_avatar to start from its face, instructions and greeting.",
+      annotations: { readOnlyHint: true },
+    },
+    run(async () => ({
+      templates: TEMPLATES.map((t) => ({
+        id: t.id,
+        label: t.label,
+        description: t.description,
+        gender: t.gender,
+        greeting: t.greeting,
+        instructions: t.systemPrompt,
+        faceUrl: `${env.clientOrigin.replace(/\/$/, "")}/presets/${t.id}.jpg`,
+      })),
+    })),
+  );
+
+  server.registerTool(
+    "replace_face",
+    {
+      description:
+        "Give an existing avatar a new face, keeping its id, instructions, voice, knowledge, share link and history. " +
+        "Exactly one of faceId (library face), photoUrl or facePrompt. The preview clip is remade; the avatar may be " +
+        "briefly not ready while the new face is processed. Not possible for LemonSlice-dashboard agents.",
+      inputSchema: {
+        avatarId: objectId,
+        faceId: z.string().regex(/^face_[fm]\d{2}$/).optional(),
+        photoUrl: z.string().url().optional(),
+        facePrompt: z.string().trim().min(10).max(600).optional(),
+      },
+    },
+    run(async ({ avatarId, faceId, photoUrl, facePrompt }) => {
+      if ([faceId, photoUrl, facePrompt].filter(Boolean).length !== 1) {
+        throw Object.assign(new Error("Provide exactly one of faceId, photoUrl or facePrompt"), { statusCode: 422 });
+      }
+      const file = faceId
+        ? undefined
+        : photoUrl
+          ? await fetchPhoto(photoUrl)
+          : await generateFace({ workspace, userId, prompt: facePrompt });
+      await studioService.replaceVisuals({ workspace, avatarId, file, faceId, userId });
+      return detailed(await avatarService.get(ws, avatarId));
+    }),
+  );
+
+  server.registerTool(
+    "list_avatar_tools",
+    {
+      description:
+        "The external MCP servers attached to an avatar - the tools it can use during a live call (look things up, " +
+        "create tasks, book meetings). Shows name, address, whether enabled and the tool names it exposes.",
+      inputSchema: { avatarId: objectId },
+      annotations: { readOnlyHint: true },
+    },
+    run(async ({ avatarId }) => mcpService.list(ws, avatarId)),
+  );
+
+  server.registerTool(
+    "add_avatar_tool",
+    {
+      description:
+        "Attach an external MCP server (https URL, optional bearer token) so the avatar can use its tools on live " +
+        "calls. The server is contacted once to check it works and to list its tools.",
+      inputSchema: {
+        avatarId: objectId,
+        name: z.string().trim().min(1).max(40),
+        url: z.string().trim().url().max(2000),
+        authToken: z.string().trim().max(4000).optional(),
+      },
+    },
+    run(async ({ avatarId, name, url, authToken }) => mcpService.add(ws, avatarId, { name, url, authToken }, userId)),
+  );
+
+  server.registerTool(
+    "set_avatar_tool_enabled",
+    {
+      description: "Turn one attached MCP server on or off for an avatar without removing it (ids from list_avatar_tools).",
+      inputSchema: { avatarId: objectId, serverId: objectId, enabled: z.boolean() },
+    },
+    run(async ({ avatarId, serverId, enabled }) => mcpService.setEnabled(ws, avatarId, serverId, enabled)),
+  );
+
+  server.registerTool(
+    "remove_avatar_tool",
+    {
+      description: "Detach an external MCP server from an avatar (ids from list_avatar_tools).",
+      inputSchema: { avatarId: objectId, serverId: objectId },
+      annotations: { destructiveHint: true },
+    },
+    run(async ({ avatarId, serverId }) => mcpService.remove(ws, avatarId, serverId)),
   );
 
   server.registerTool(

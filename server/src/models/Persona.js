@@ -36,6 +36,11 @@ const personaSchema = new mongoose.Schema(
     /** Hard ceiling for one call. Falls back to MAX_CALL_SECONDS when unset. */
     maxCallSeconds: { type: Number, min: 60, max: 14400 },
 
+    /** Gives the avatar the save_lead tool: it can store a caller's contact details as a lead. */
+    captureLeads: { type: Boolean, default: false },
+    /** Gives the avatar the request_human tool: a caller can ask for a person and it is recorded and the owner told. */
+    humanHandoff: { type: Boolean, default: false },
+
     tools: [{ name: String, description: String, schema: mongoose.Schema.Types.Mixed }],
   },
   { timestamps: true },

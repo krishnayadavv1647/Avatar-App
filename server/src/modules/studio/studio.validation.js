@@ -29,6 +29,8 @@ export const behaviourFields = z.object({
   voice: z.string().trim().max(60).optional().refine(knownVoice, "That voice is not available"),
   voiceSpeed: z.coerce.number().min(0.5).max(1.5).optional(),
   useDefaultPrompt: z.boolean().optional(),
+  captureLeads: z.boolean().optional(),
+  humanHandoff: z.boolean().optional(),
   llmModel: z.string().trim().max(80).optional().refine(knownModel, "That language model is not available"),
 });
 

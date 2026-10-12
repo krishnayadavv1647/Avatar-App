@@ -1,6 +1,6 @@
 import { KnowledgeDocument } from "../../models/index.js";
 import { avatarRepository } from "./avatar.repository.js";
-import { MAX_DOCS, extractText } from "../../ai/knowledge.js";
+import { MAX_DOCS, CONTEXT_BUDGET_CHARS, budgetReport, extractText } from "../../ai/knowledge.js";
 import { logger } from "../../config/logger.js";
 
 const notFound = (what) => {
@@ -33,7 +33,27 @@ export const knowledgeService = {
       .sort({ createdAt: 1 })
       .select("-text")
       .lean();
-    return docs.map(summary);
+    // Whether each document actually reaches a call: past the budget it is cut or left out.
+    const report = budgetReport(docs);
+    return docs.map((doc, i) => ({ ...summary(doc), reachesCalls: report[i].reachesCalls }));
+  },
+
+  /** One document with its stored text - what the avatar actually has to draw on. */
+  async get(workspaceId, avatarId, docId) {
+    await assertAvatar(workspaceId, avatarId);
+    const [all, doc] = await Promise.all([
+      KnowledgeDocument.find({ workspaceId, avatarId }).sort({ createdAt: 1 }).select("name chars").lean(),
+      KnowledgeDocument.findOne({ _id: docId, workspaceId, avatarId }).lean(),
+    ]);
+    if (!doc) throw notFound("Document");
+    const report = budgetReport(all);
+    const index = all.findIndex((d) => String(d._id) === String(doc._id));
+    return {
+      ...summary(doc),
+      text: doc.text,
+      reachesCalls: report[index].reachesCalls,
+      budgetChars: CONTEXT_BUDGET_CHARS,
+    };
   },
 
   async add(workspaceId, avatarId, file, userId) {
