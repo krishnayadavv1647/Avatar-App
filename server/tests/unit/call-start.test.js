@@ -74,4 +74,11 @@ describe("greetingFor", () => {
       assert.match(g.reply.instructions, /Greet the caller/);
     }
   });
+
+  test("with the switch off the greeting goes to the model as an instruction, as it used to", () => {
+    assert.deepEqual(greetingFor({ greeting: "Hi, I am Alex." }, { direct: false }), {
+      reply: { instructions: "Hi, I am Alex." },
+    });
+    assert.match(greetingFor({}, { direct: false }).reply.instructions, /Greet the caller/);
+  });
 });

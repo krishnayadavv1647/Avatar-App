@@ -47,8 +47,9 @@ export function waitForFirstSpeech(session, { timeoutMs = FIRST_SPEECH_TIMEOUT_M
  *
  * @returns {{ say: string } | { reply: { instructions: string } }}
  */
-export function greetingFor(persona) {
+export function greetingFor(persona, { direct = true } = {}) {
   const written = typeof persona?.greeting === "string" ? persona.greeting.trim() : "";
-  if (written) return { say: written };
-  return { reply: { instructions: "Greet the caller warmly in one sentence." } };
+  if (written && direct) return { say: written };
+  // The earlier behaviour (GREETING_DIRECT=false): the model gets the greeting as its instruction.
+  return { reply: { instructions: written || "Greet the caller warmly in one sentence." } };
 }

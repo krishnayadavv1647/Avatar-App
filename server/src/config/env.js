@@ -116,6 +116,15 @@ export const env = {
   // off). The avatar asks "are you still there?" once, shortly before. Not
   // applied to meetings, where long silences are normal.
   idleCallSeconds: Number(optional("IDLE_CALL_SECONDS", "60")),
+  // Two behaviours of how a call opens, each with an off switch so a problem on
+  // a live call can be told apart from the other in a minute: set to "false" and
+  // restart the worker.
+  //   GREETING_DIRECT - speak the owner's greeting as written (no model). "false"
+  //                     hands it to the model as an instruction, as before.
+  //   CALLER_FIRST    - start the avatar vendor only once the caller's microphone
+  //                     is in. "false" starts it at once, as before.
+  greetingDirect: optional("GREETING_DIRECT", "true") !== "false",
+  callerFirst: optional("CALLER_FIRST", "true") !== "false",
 
   // Vendors are not assumed to sign their webhooks, so the callback URL carries
   // an unguessable token and we verify that instead. See webhooks/provider.webhook.js.

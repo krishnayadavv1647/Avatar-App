@@ -237,7 +237,7 @@ export default defineAgent({
     // bills for as long as its session is open, so a caller still answering the
     // browser's microphone prompt - or who never will - must not be holding one
     // open. (A meeting has no caller of ours to wait for.)
-    if (!meetingUrl) {
+    if (!meetingUrl && env.callerFirst) {
       const here = await waitForCaller(ctx.room);
       if (finished) return; // the caller left, or the room closed, while waiting
       if (!here) {
@@ -336,7 +336,7 @@ export default defineAgent({
       }
     }
 
-    const greeting = greetingFor(avatar.persona);
+    const greeting = greetingFor(avatar.persona, { direct: env.greetingDirect });
     /** The owner's greeting is spoken as written (no model, no "thinking"); otherwise the model makes one up. */
     const speakGreeting = () => (greeting.say ? session.say(greeting.say) : session.generateReply(greeting.reply));
 
