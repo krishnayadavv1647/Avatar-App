@@ -33,7 +33,6 @@ export function instructionsFor(avatar, conversation = {}) {
         `answer in theirs.`,
     );
   }
-
   // Someone arriving by share link typed their name before joining. An
   // interviewer that knows who it is talking to sounds like one.
   const guest = conversation.guest?.name;

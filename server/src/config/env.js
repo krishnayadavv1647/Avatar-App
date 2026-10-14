@@ -107,6 +107,15 @@ export const env = {
   lemonsliceApiKey: optional("LEMONSLICE_API_KEY"),
 
   maxCallSeconds: Number(optional("MAX_CALL_SECONDS", "3600")),
+  // How long a call runs when its avatar sets no length of its own. Short on
+  // purpose: a call is billed for every second it is open, and a tab left open
+  // on a share link costs as much as one being talked in. An avatar's owner
+  // raises it per avatar (Settings -> Maximum call length).
+  defaultCallSeconds: Number(optional("DEFAULT_CALL_SECONDS", "300")),
+  // A call nobody is talking in is ended after this much silence (0 turns it
+  // off). The avatar asks "are you still there?" once, shortly before. Not
+  // applied to meetings, where long silences are normal.
+  idleCallSeconds: Number(optional("IDLE_CALL_SECONDS", "60")),
 
   // Vendors are not assumed to sign their webhooks, so the callback URL carries
   // an unguessable token and we verify that instead. See webhooks/provider.webhook.js.

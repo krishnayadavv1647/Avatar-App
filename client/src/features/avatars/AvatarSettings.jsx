@@ -24,6 +24,7 @@ const ASPECT_CLASS = { "2x3": "aspect-[2/3]", "9x16": "aspect-[9/16]", "1x1": "a
 
 const DURATIONS = [
   { value: 300, label: "5 minutes" },
+  { value: 600, label: "10 minutes" },
   { value: 900, label: "15 minutes" },
   { value: 1800, label: "30 minutes" },
   { value: 3600, label: "1 hour" },
@@ -69,6 +70,8 @@ export default function AvatarSettings({ avatar, options, onChange }) {
   const llms = options?.llmModels || [];
   const llm = p.llmModel || options?.defaultLlmModel || "";
   const chosenLlm = llms.find((m) => m.id === llm);
+  // What a call runs for when no length is chosen here; the server decides.
+  const defaultMinutes = Math.round((options?.defaultCallSeconds || 300) / 60);
 
   return (
     <div className="mx-auto max-w-[700px] space-y-10 px-6 pb-20 pt-2">
@@ -270,7 +273,7 @@ export default function AvatarSettings({ avatar, options, onChange }) {
               value={p.maxCallSeconds}
               onChange={(value) => setPersona({ maxCallSeconds: value ? Number(value) : "" }, { now: true })}
             >
-              <option value="">Default</option>
+              <option value="">{`Default (${defaultMinutes} min)`}</option>
               {DURATIONS.map((d) => (
                 <option key={d.value} value={d.value}>
                   {d.label}

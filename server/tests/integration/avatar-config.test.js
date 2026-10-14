@@ -72,7 +72,8 @@ describe("GET /api/avatars/:id/config", () => {
     const id = await newAvatar({});
     const { effective } = await config(id);
     assert.equal(effective.maxCallSeconds.source, "install default");
-    assert.equal(effective.maxCallSeconds.value, env.maxCallSeconds);
+    assert.equal(effective.maxCallSeconds.value, env.defaultCallSeconds);
+    assert.equal(env.defaultCallSeconds, 300, "five minutes unless an install says otherwise");
   });
 
   test("temperature is reported as ignored when the model is not Claude", async () => {

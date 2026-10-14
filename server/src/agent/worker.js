@@ -18,13 +18,19 @@ import { connectMcpTools } from "../integrations/mcp/index.js";
 import { errorDetails, logError } from "../utils/errorLog.js";
 import { applyApiConfigs } from "../modules/admin/system/apiConfig.service.js";
 import { preflight } from "./preflight.js";
-import { waitForCallReady } from "./callReady.js";
+import { waitForCallReady, waitForCaller } from "./callReady.js";
+import { callLimitSeconds } from "./callLimit.js";
+import { createIdleWatch } from "./idleWatch.js";
+import { greetingFor, waitForFirstSpeech } from "./callStart.js";
 import { isPreviewRoom, runPreview } from "./preview.job.js";
 
 // How long LemonSlice keeps the face up with nothing to say, in a meeting.
 // The default (a minute) suits a one-to-one call, not a meeting that talks
 // among itself for a while.
 const MEETING_IDLE_SECONDS = 600;
+
+// How long the avatar's face may take to appear once the vendor is started.
+const FACE_TIMEOUT_MS = 30_000;
 
 /**
  * The realtime worker. One long-lived process, separate from the API, that
@@ -76,8 +82,9 @@ export default defineAgent({
     // The persona's limit, or the install's. The brief promises "calls end
     // automatically after this", and on a public link it is also the only cap
     // on what one caller can spend.
-    const limitSec = avatar.persona?.maxCallSeconds || env.maxCallSeconds;
-    const limitTimer = setTimeout(() => endForTimeLimit(), limitSec * 1000);
+    const limitSec = callLimitSeconds(avatar.persona);
+    // Started with the billed call (see `begin`), so the limit and the meter agree.
+    let limitTimer = null;
 
     /**
      * Finishes the conversation however the call ends - a hang-up, the caller
@@ -85,10 +92,13 @@ export default defineAgent({
      * it too on a hang-up; `finish` is idempotent, so the second one is a no-op.
      */
     let finished = false;
+    // Set below, once the call has really begun.
+    let idleWatch = null;
     const finish = async () => {
       if (finished) return;
       finished = true;
       clearTimeout(limitTimer);
+      idleWatch?.stop();
       await transcript?.flush();
       await mcp?.close();
       await renderer.stop().catch((err) => logger.warn({ err: err.message }, "renderer stop failed"));
@@ -124,6 +134,23 @@ export default defineAgent({
       await closeRoom();
     }
 
+    /** Ends a call nobody is using: a goodbye, then the same close-down as the time limit. */
+    async function endForIdle() {
+      endReason = "idle";
+      logger.info({ room: ctx.room.name }, "call ended: nobody was talking");
+      if (session) {
+        const goodbye = session
+          .generateReply({
+            instructions:
+              "Nobody has said anything for a while. Say in one short sentence that you are ending the call and that they can call back any time. Do not ask a question.",
+          })
+          .waitForPlayout();
+        await Promise.race([goodbye, new Promise((r) => setTimeout(r, 10_000))]).catch(() => {});
+      }
+      await finish();
+      await closeRoom();
+    }
+
     ctx.addShutdownCallback(finish);
     ctx.room.once("disconnected", () => finish());
 
@@ -148,6 +175,37 @@ export default defineAgent({
       await closeRoom();
     };
 
+    /**
+     * The call really begins: the status turns active and the clock - the one
+     * the person is billed on - starts, together with the call's length limit
+     * and its silence watch. Called once, at the first word spoken (see
+     * agent/callStart.js), never while the avatar is still getting ready.
+     */
+    let began = false;
+    const begin = async ({ watchSilence = true } = {}) => {
+      if (began || finished) return;
+      began = true;
+      await markActive(conversation);
+      limitTimer = setTimeout(() => endForTimeLimit(), limitSec * 1000);
+
+      // Silence ends the call (not in a meeting, where long silences are normal).
+      // The person speaking is the call in use; so is the avatar mid-answer.
+      if (watchSilence && session && env.idleCallSeconds > 0) {
+        idleWatch = createIdleWatch({
+          idleSeconds: env.idleCallSeconds,
+          busy: () => ["speaking", "thinking"].includes(session.agentState) || session.userState === "speaking",
+          onWarn: () =>
+            session.generateReply({
+              instructions: "The caller has gone quiet. Ask once, in one short sentence, whether they are still there.",
+            }),
+          onIdle: () => endForIdle(),
+        });
+        session.on("user_state_changed", (ev) => ev?.newState === "speaking" && idleWatch.touch());
+        session.on("user_input_transcribed", () => idleWatch.touch());
+        idleWatch.start();
+      }
+    };
+
     if (!pipeline.available) {
       // No speech session to hand over, so only a renderer that does not
       // need one (the local stub) can run here.
@@ -158,7 +216,7 @@ export default defineAgent({
         return;
       }
       logger.warn({ room: ctx.room.name }, "video-only mode; no conversation");
-      await markActive(conversation);
+      await begin();
       // Hold the job open so the track keeps publishing until the room closes.
       await new Promise((resolve) => ctx.room.once("disconnected", resolve));
       return;
@@ -174,6 +232,19 @@ export default defineAgent({
     // meeting instead of our room. Meetings have long silences, so the
     // renderer's idle timeout is stretched; the call's time limit still caps it.
     const meetingUrl = conversation.meetingUrl;
+
+    // The vendor is only started once the caller is really here. LemonSlice
+    // bills for as long as its session is open, so a caller still answering the
+    // browser's microphone prompt - or who never will - must not be holding one
+    // open. (A meeting has no caller of ours to wait for.)
+    if (!meetingUrl) {
+      const here = await waitForCaller(ctx.room);
+      if (finished) return; // the caller left, or the room closed, while waiting
+      if (!here) {
+        await failStart(new Error("the caller never joined the call (no microphone or no connection)"));
+        return;
+      }
+    }
 
     // The avatar starts with the session in hand and before the session does:
     // LemonSlice takes over the session's audio output so the voice is played
@@ -254,24 +325,43 @@ export default defineAgent({
       return;
     }
 
-    // The clock starts when the call really begins: the caller is in the room
-    // with their microphone and the avatar's face is up. Before that the
-    // person may be answering the browser's microphone prompt, and none of it
-    // is time they were able to talk. A meeting has no caller of ours to wait for.
+    // The caller is already here; what is left is the avatar's face coming up,
+    // which is the vendor's own start-up and takes seconds.
     if (!meetingUrl) {
-      const ready = await waitForCallReady(ctx.room);
+      const ready = await waitForCallReady(ctx.room, FACE_TIMEOUT_MS);
       if (finished) return; // the caller left, or the room closed, while waiting
       if (!ready) {
-        await failStart(new Error("the caller never joined the call (no microphone or no connection)"));
+        await failStart(new Error("the avatar's video never came up"));
         return;
       }
     }
 
-    await markActive(conversation);
+    const greeting = greetingFor(avatar.persona);
+    /** The owner's greeting is spoken as written (no model, no "thinking"); otherwise the model makes one up. */
+    const speakGreeting = () => (greeting.say ? session.say(greeting.say) : session.generateReply(greeting.reply));
 
-    session.generateReply({
-      instructions: avatar.persona?.greeting || "Greet the caller warmly in one sentence.",
-    });
+    if (meetingUrl) {
+      // In a meeting the avatar may say nothing until it is addressed, and the
+      // bot is in the meeting from the moment it joined: bill from here.
+      await begin({ watchSilence: false });
+      speakGreeting();
+      return;
+    }
+
+    // The meter starts at the first word, not while the greeting is being
+    // thought up and voiced. Listen first, then ask for the greeting, so its
+    // first word cannot be missed.
+    const firstSpeech = waitForFirstSpeech(session);
+    speakGreeting();
+
+    const who = await firstSpeech;
+    if (finished) return;
+    if (!who) {
+      // Nobody ever spoke: nothing was delivered, so nothing is billed.
+      await failStart(new Error("the avatar never started talking"));
+      return;
+    }
+    await begin();
   },
 });
 

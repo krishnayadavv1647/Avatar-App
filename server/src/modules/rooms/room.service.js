@@ -214,17 +214,32 @@ export const roomService = {
    */
   async finish(conversationId, { endReason, status = "ended" } = {}) {
     const endedAt = new Date();
+    // One atomic step sets the status and the duration together. The duration
+    // used to be saved a moment after the status flipped, and whoever lost the
+    // race (the API's hang-up against the worker seeing the room close) read the
+    // call in between: ended, but with no duration - so it was metered at zero
+    // minutes and never charged.
     const won = await Conversation.findOneAndUpdate(
       { _id: conversationId, status: { $in: ["pending", "active"] } },
-      // "failed" when the call never got going - the worker says why in endReason.
-      { $set: { status, endedAt, ...(endReason && { endReason }) } },
+      [
+        {
+          $set: {
+            // $literal: text from a vendor or an error must never be read as a field path.
+            status: { $literal: status },
+            endedAt,
+            ...(endReason && { endReason: { $literal: endReason } }),
+            durationSec: {
+              $cond: [
+                { $ifNull: ["$startedAt", false] },
+                { $round: [{ $divide: [{ $subtract: [endedAt, "$startedAt"] }, 1000] }, 0] },
+                { $ifNull: ["$durationSec", 0] },
+              ],
+            },
+          },
+        },
+      ],
       { new: true },
     );
-
-    if (won?.startedAt) {
-      won.durationSec = Math.round((endedAt - won.startedAt) / 1000);
-      await won.save();
-    }
 
     const conversation = won || (await Conversation.findById(conversationId));
     const entry = await usageService.recordConversation(conversation);

@@ -164,7 +164,7 @@ export async function describeAvatar(avatar) {
       speed: { value: persona.voiceSpeed ?? null, applied: speedApplied },
     },
     maxCallSeconds: {
-      value: persona.maxCallSeconds || env.maxCallSeconds,
+      value: persona.maxCallSeconds || env.defaultCallSeconds,
       source: persona.maxCallSeconds ? "avatar" : "install default",
     },
     instructions: { usesRecommendedGuidance: Boolean(persona.useDefaultPrompt) },

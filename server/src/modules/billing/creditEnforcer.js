@@ -1,6 +1,6 @@
 import { Conversation, Subscription } from "../../models/index.js";
 import { roomService } from "../rooms/room.service.js";
-import { availableCredits, ensureGrants, isUnlimited } from "./credit.service.js";
+import { availableCredits, chargeConversation, ensureGrants, isUnlimited } from "./credit.service.js";
 import { logger } from "../../config/logger.js";
 
 /**
@@ -44,10 +44,47 @@ export async function enforceCredits() {
   return ended;
 }
 
+/**
+ * Charges calls that ended with minutes on the clock and no charge.
+ *
+ * A call is metered and then charged in two writes; if the process dies or the
+ * database blinks between them, the call is in the usage ledger and not in the
+ * credits ledger. Charging is idempotent per call, so catching it up is safe.
+ * Only the last hour is looked at: this repairs a failed write, it does not
+ * bill history.
+ */
+export async function chargeMissedCalls({ sinceMs = 60 * 60_000, limit = 50 } = {}) {
+  const missed = await Conversation.find({
+    status: { $in: ["ended", "failed"] },
+    durationSec: { $gt: 0 },
+    credits: { $in: [0, null] },
+    endedAt: { $gt: new Date(Date.now() - sinceMs) },
+  })
+    .limit(limit)
+    .lean();
+
+  let charged = 0;
+  for (const conversation of missed) {
+    try {
+      const result = await chargeConversation(conversation);
+      if (result?.applied) charged += 1;
+    } catch (err) {
+      logger.warn({ err: err.message, conversationId: String(conversation._id) }, "could not charge a missed call");
+    }
+  }
+  if (charged) logger.warn({ charged }, "charged calls that had ended without a charge");
+  return charged;
+}
+
 /** Checks every fifteen seconds. Not started under test. */
 export function startCreditEnforcer() {
   if (process.env.NODE_ENV === "test") return;
-  setInterval(() => enforceCredits().catch((err) => logger.warn({ err: err.message }, "credit check failed")), EVERY_MS).unref();
+  let tick = 0;
+  setInterval(() => {
+    enforceCredits().catch((err) => logger.warn({ err: err.message }, "credit check failed"));
+    // Once a minute is plenty for repairs.
+    if (++tick % 4 === 0) chargeMissedCalls().catch((err) => logger.warn({ err: err.message }, "missed-call check failed"));
+  }, EVERY_MS).unref();
 }
 
 /**

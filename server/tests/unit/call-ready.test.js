@@ -7,7 +7,7 @@ import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { RoomEvent, TrackKind } from "@livekit/rtc-node";
-import { callIsReady, waitForCallReady } from "../../src/agent/callReady.js";
+import { callIsReady, callerIsReady, waitForCaller, waitForCallReady } from "../../src/agent/callReady.js";
 
 const participant = (identity, ...kinds) => ({
   identity,
@@ -66,3 +66,37 @@ describe("call readiness", () => {
     assert.equal(await waiting, false);
   });
 });
+
+describe("waiting for the caller alone, before the vendor is started", () => {
+  test("a caller with a microphone is enough - no avatar face needed yet", () => {
+    assert.equal(callerIsReady(fakeRoom(participant("user-1", TrackKind.KIND_AUDIO))), true);
+    assert.equal(callIsReady(fakeRoom(participant("user-1", TrackKind.KIND_AUDIO))), false, "but the call is not ready until the face is up");
+  });
+
+  test("no microphone, or someone who is not the caller, is not enough", () => {
+    assert.equal(callerIsReady(fakeRoom(participant("user-1"))), false);
+    assert.equal(callerIsReady(fakeRoom(participant("avatar", TrackKind.KIND_AUDIO))), false);
+    assert.equal(callerIsReady(fakeRoom()), false);
+  });
+
+  test("resolves true when the caller's microphone appears", async () => {
+    const caller = participant("guest-7");
+    const room = fakeRoom(caller);
+    const waiting = waitForCaller(room, 5_000);
+    caller.trackPublications.set("mic", { kind: TrackKind.KIND_AUDIO });
+    room.emit(RoomEvent.TrackPublished);
+    assert.equal(await waiting, true);
+  });
+
+  test("resolves false when the caller never allows the microphone: the vendor is never started", async () => {
+    assert.equal(await waitForCaller(fakeRoom(participant("user-1")), 30), false);
+  });
+
+  test("resolves false if the worker is disconnected while waiting", async () => {
+    const room = fakeRoom();
+    const waiting = waitForCaller(room, 5_000);
+    room.emit(RoomEvent.Disconnected);
+    assert.equal(await waiting, false);
+  });
+});
+

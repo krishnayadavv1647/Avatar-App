@@ -536,6 +536,8 @@ export const studioService = {
       // page then offers only the install default.
       voices: voicesForTts(),
       defaultVoice: defaultVoiceFor(),
+      // Seconds a call runs when the avatar sets no length of its own.
+      defaultCallSeconds: env.defaultCallSeconds,
       defaultVoices: { female: defaultVoiceFor("female"), male: defaultVoiceFor("male") },
       llmModels: llmModels(),
       defaultLlmModel: defaultLlmModel(),

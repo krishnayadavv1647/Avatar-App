@@ -216,6 +216,7 @@ export const usageService = {
           }
         : null,
       maxCallSeconds: env.maxCallSeconds,
+      defaultCallSeconds: env.defaultCallSeconds,
     };
   },
 };

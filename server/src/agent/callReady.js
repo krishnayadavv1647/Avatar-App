@@ -18,6 +18,15 @@ export const CALL_READY_TIMEOUT_MS = 90_000;
 const isCaller = (p) => /^(user|guest)-/.test(p.identity || "");
 const publishes = (p, kind) => [...p.trackPublications.values()].some((t) => t.kind === kind);
 
+/**
+ * Whether the caller is in the room with a microphone published - before the
+ * avatar's face exists. The vendor session is only started once this is true, so
+ * a caller who never allows the microphone costs the vendor nothing.
+ */
+export function callerIsReady(room) {
+  return [...room.remoteParticipants.values()].some((p) => isCaller(p) && publishes(p, TrackKind.KIND_AUDIO));
+}
+
 /** Whether the room, as it is right now, is a call in progress. */
 export function callIsReady(room) {
   const others = [...room.remoteParticipants.values()];
@@ -36,9 +45,9 @@ export function callIsReady(room) {
  *
  * @param {import("@livekit/rtc-node").Room} room
  */
-export function waitForCallReady(room, timeoutMs = CALL_READY_TIMEOUT_MS) {
+export function waitForCallReady(room, timeoutMs = CALL_READY_TIMEOUT_MS, isReady = callIsReady) {
   return new Promise((resolve) => {
-    if (callIsReady(room)) return resolve(true);
+    if (isReady(room)) return resolve(true);
 
     const changes = [RoomEvent.ParticipantConnected, RoomEvent.TrackPublished, RoomEvent.TrackSubscribed];
     const done = (ready) => {
@@ -48,7 +57,7 @@ export function waitForCallReady(room, timeoutMs = CALL_READY_TIMEOUT_MS) {
       resolve(ready);
     };
     const check = () => {
-      if (callIsReady(room)) done(true);
+      if (isReady(room)) done(true);
     };
     const gone = () => done(false);
     const timer = setTimeout(() => done(false), timeoutMs);
@@ -57,3 +66,6 @@ export function waitForCallReady(room, timeoutMs = CALL_READY_TIMEOUT_MS) {
     room.on(RoomEvent.Disconnected, gone);
   });
 }
+
+/** Resolves true once the caller is in with a microphone; false on timeout or disconnect. */
+export const waitForCaller = (room, timeoutMs = CALL_READY_TIMEOUT_MS) => waitForCallReady(room, timeoutMs, callerIsReady);
