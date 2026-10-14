@@ -1,10 +1,10 @@
 # Credits
 
-Calls are paid for in credits. A person sees a balance and what it buys ("240 credits = 24 minutes of Standard calls"); an admin sets what a minute costs, what plans give, and what can be bought.
+Calls are paid for in credits. A person sees a balance and what it buys ("250 credits = 10 minutes of Standard calls"); an admin sets what a minute costs, what plans give, and what can be bought.
 
 ## How a call is paid for
 
-- **The price of a minute depends on the avatar's render model** (set on its settings page): Standard 10, Flash 6, Lite 4 credits a minute by default. An admin changes them under Admin > Credits.
+- **The price of a minute depends on the avatar's render model** (set on its settings page): Standard 25, Flash 15, Lite 10 credits a minute by default. An admin changes them under Admin > Credits.
 - **A call is charged when it ends,** for the seconds it ran, at the rate it *started* with - changing a rate never reprices a call already running.
 - **The clock starts at the first word spoken** - the avatar's greeting, or the caller speaking first (`agent/callStart.js`). Not when the worker picks the job up, not while the caller answers the microphone prompt (`agent/callReady.js`), and not while the avatar is still thinking up its greeting. A call where nobody speaks within 45 seconds never starts and is never billed. The length limit and the silence watch start with the clock.
 - **The vendor (LemonSlice) is started only once the caller is in the room with a microphone** (`agent/callReady.js`), because it bills for as long as its session is open. A caller still answering the microphone prompt, or who never allows it, costs nothing at the vendor; the worker gives up after 90 seconds. What is left on our side of the vendor's meter is its own start-up (a few seconds) before the first word, which is not billed to the person.
@@ -16,6 +16,12 @@ Calls are paid for in credits. A person sees a balance and what it buys ("240 cr
 - **A running call is ended when the credits run out.** `modules/billing/creditEnforcer.js` checks every 15 seconds and ends every call in the workspace (reason "out of credits"); a call can overrun by at most one check. It runs in the API, so it covers every kind of call.
 - A plan with **Unlimited credits** is never refused, charged or ended.
 
+## Why 25 a Standard minute
+
+The avatar vendor (LemonSlice) charges about 24 of its own credits a minute on its standard model (its Starter plan: 1,000 credits for 41 minutes, $8). A Standard minute here is 25 credits, so one credit here is about one credit there, and with a credit worth about two cents a minute is billed at about 50 cents against a cost of roughly a quarter of a dollar all in. Flash and Lite keep their old proportions; the vendor does not publish what they cost.
+
+**The rate went from 10 to 25 in October 2026.** Balances were multiplied by 2.5 once, with `node src/scripts/migrate-credit-rate.js --apply` (a dry run is the default; it shows each account's before and after, refuses while calls are running, and is safe to repeat - one ledger entry per workspace, marked "Credit rate change"). Plan minutes did not change: a plan's credits are its minutes times the Standard rate. Explicit monthly credits on a plan and the credits in a pack are multiplied in the same run.
+
 ## Where credits come from
 
 Everything is a row in the ledger (`CreditTransaction`); the balance is their sum, kept on `CreditAccount`.
@@ -23,7 +29,7 @@ Everything is a row in the ledger (`CreditTransaction`); the balance is their su
 | Kind | What |
 |---|---|
 | `plan_grant` | The plan's monthly credits. Topped up to the plan's amount each calendar month (UTC) the first time the balance is read, on plan assignment, and by a half-hourly sweep. Moving up mid-month gives the difference; nothing is ever taken back. |
-| `signup_grant` | Welcome credits (default 100), once, for an account that starts with no plan. |
+| `signup_grant` | Welcome credits (default 250: ten minutes of Standard), once, for an account that starts with no plan. |
 | `admin_grant` / `admin_deduct` | An admin on a person's page, with a required reason, audit-logged. |
 | `purchase` | A credit pack bought with Stripe. |
 | `usage` | A finished call (negative). |

@@ -9,6 +9,7 @@ import "../setup-env.js";
 import test, { after, before, describe } from "node:test";
 import assert from "node:assert/strict";
 import { signUp, startTestApp } from "../helpers.js";
+import { DEFAULT_RATES, DEFAULT_WELCOME_CREDITS } from "../../src/modules/billing/credit.service.js";
 import * as models from "../../src/models/index.js";
 
 let app;
@@ -176,7 +177,7 @@ describe("accepting", () => {
     const account = (await admin.get(`/api/admin/users/${user.user.id}/credits`)).body;
     assert.equal(account.plan.monthlyCredits, 770);
     // The welcome credits from sign-up, and the plan's credits from accepting.
-    assert.equal(account.balance, 100 + 770);
+    assert.equal(account.balance, DEFAULT_WELCOME_CREDITS + 770);
     assert.equal(detail.user.source, "invited");
     assert.equal(detail.user.admin, false);
 

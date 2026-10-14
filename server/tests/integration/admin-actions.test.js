@@ -7,6 +7,7 @@
 import "../setup-env.js";
 import test, { after, before, describe } from "node:test";
 import assert from "node:assert/strict";
+import { DEFAULT_RATES } from "../../src/modules/billing/credit.service.js";
 import { signIn, signUp, startTestApp } from "../helpers.js";
 
 let app;
@@ -233,13 +234,13 @@ describe("plan limits", () => {
     await admin.put(`/api/admin/users/${user.user.id}/plan`, { planId: plan.body.plan._id });
     const avatar = (await adopt(user, "Caller")).body.avatar;
 
-    // A Standard minute costs 10 credits.
-    await setBalance(user, 5);
+    // A Standard minute costs DEFAULT_RATES.standard credits.
+    await setBalance(user, DEFAULT_RATES.standard - 1);
     const refused = await call(user, avatar);
     assert.equal(refused.status, 402);
     assert.equal(refused.body.error.code, "insufficient_credits");
 
-    await setBalance(user, 10);
+    await setBalance(user, DEFAULT_RATES.standard);
     const started = await call(user, avatar);
     assert.equal(started.status, 201);
     await user.del(`/api/rooms/${started.body.conversationId}`);

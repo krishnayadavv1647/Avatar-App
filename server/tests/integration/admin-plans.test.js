@@ -10,6 +10,7 @@ import path from "node:path";
 import test, { after, before, describe } from "node:test";
 import assert from "node:assert/strict";
 import { signUp, startTestApp } from "../helpers.js";
+import { DEFAULT_RATES, DEFAULT_WELCOME_CREDITS } from "../../src/modules/billing/credit.service.js";
 
 let app;
 let admin;
@@ -88,8 +89,8 @@ describe("presentation fields", () => {
     await admin.patch(`/api/admin/plans/${plan._id}`, { monthlyCredits: 500 });
     const { body } = await admin.get(`/api/admin/users/${user.user.id}/credits`);
     assert.equal(body.plan.monthlyCredits, 500);
-    // 100 welcome credits at sign-up, then the plan's 100, then the 400 this edit added.
-    assert.equal(body.balance, 600);
+    // The welcome credits at sign-up, then the plan's 100, then the 400 this edit added.
+    assert.equal(body.balance, DEFAULT_WELCOME_CREDITS + 500);
   });
 });
 
@@ -108,8 +109,8 @@ describe("credits fields", () => {
     const legacy = await Plan.create({ key: `legacy-${counter}`, name: "Legacy", includedMinutes: 50 });
 
     const { body } = await admin.get("/api/admin/plans");
-    // 10 credits to a Standard minute.
-    assert.equal(body.plans.find((p) => p._id === String(legacy._id)).monthlyCredits, 500);
+    // The Standard rate, per minute.
+    assert.equal(body.plans.find((p) => p._id === String(legacy._id)).monthlyCredits, 50 * DEFAULT_RATES.standard);
   });
 
   test("the old minute fields are refused, as are negative credits", async () => {

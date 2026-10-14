@@ -23,11 +23,20 @@ import {
  */
 export const RENDER_MODELS = ["standard", "flash", "lite"];
 
-/** Credits per minute. An admin can change them; these are the starting point. */
-export const DEFAULT_RATES = Object.freeze({ standard: 10, flash: 6, lite: 4 });
+/**
+ * Credits per minute. An admin can change them; these are the starting point.
+ *
+ * Set from what a minute actually costs. The avatar vendor (LemonSlice) charges
+ * about 24 of its own credits a minute on the standard model, so a Standard
+ * minute here is 25: one credit here is about one credit there, and a credit
+ * is worth about two cents of a minute (a Standard minute costs us roughly a
+ * quarter of a dollar all in). Flash and Lite keep their old proportions; the
+ * vendor does not publish what they cost.
+ */
+export const DEFAULT_RATES = Object.freeze({ standard: 25, flash: 15, lite: 10 });
 
 /** What a new account with no plan starts with: ten minutes on Standard. */
-export const DEFAULT_WELCOME_CREDITS = 100;
+export const DEFAULT_WELCOME_CREDITS = 250;
 
 const RATES_KEY = "credit_rates";
 const WELCOME_KEY = "welcome_credits";

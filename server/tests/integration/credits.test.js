@@ -15,7 +15,7 @@ import {
   Plan,
   Subscription,
 } from "../../src/models/index.js";
-import { creditService } from "../../src/modules/billing/credit.service.js";
+import { DEFAULT_RATES, DEFAULT_WELCOME_CREDITS, creditService } from "../../src/modules/billing/credit.service.js";
 import { enforceCredits, grantMonthlyCredits } from "../../src/modules/billing/creditEnforcer.js";
 import { signUp, startTestApp } from "../helpers.js";
 
@@ -25,6 +25,14 @@ let admin;
 before(async () => {
   app = await startTestApp({ seed: false });
   admin = await signUp(app.baseUrl, { email: "admin@example.com", name: "Admin" });
+  // These tests are about how credits are granted, charged and enforced, not about
+  // what the shipped rates are: pin round numbers an admin could equally have set
+  // (the shipped defaults have their own test, below).
+  const pinned = await admin.put("/api/admin/credits/settings", {
+    rates: { standard: 10, flash: 6, lite: 4 },
+    welcomeCredits: 100,
+  });
+  assert.equal(pinned.status, 200);
 });
 
 after(() => app.stop());
@@ -65,6 +73,20 @@ const putOnPlan = async (user, plan) => {
   const res = await admin.put(`/api/admin/users/${user.user.id}/plan`, { planId: String(plan._id) });
   assert.equal(res.status, 200);
 };
+
+describe("the shipped defaults", () => {
+  test("a Standard minute is 25 credits, in step with the vendor's ~24 a minute", () => {
+    assert.deepEqual({ ...DEFAULT_RATES }, { standard: 25, flash: 15, lite: 10 });
+  });
+
+  test("the welcome credits are still ten minutes of Standard", () => {
+    assert.equal(DEFAULT_WELCOME_CREDITS / DEFAULT_RATES.standard, 10);
+  });
+
+  test("Flash and Lite keep their proportions: cheaper, never dearer, than Standard", () => {
+    assert.ok(DEFAULT_RATES.lite < DEFAULT_RATES.flash && DEFAULT_RATES.flash < DEFAULT_RATES.standard);
+  });
+});
 
 describe("a new account", () => {
   test("starts with welcome credits, once, and is told what they buy", async () => {

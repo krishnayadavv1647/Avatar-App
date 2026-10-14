@@ -31,7 +31,7 @@ export function formatMinutes(minutes) {
 }
 
 /** Credits per minute for an avatar: its render model's rate. */
-export const rateFor = (rates, avatar) => rates?.[avatar?.render?.model] ?? rates?.standard ?? 10;
+export const rateFor = (rates, avatar) => rates?.[avatar?.render?.model] ?? rates?.standard ?? 25;
 
 export const RENDER_LABEL = { standard: "Standard", flash: "Flash", lite: "Lite" };
 

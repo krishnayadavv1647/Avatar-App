@@ -67,7 +67,7 @@ export default function RatesCard() {
                 step="0.1"
                 value={rates[model]}
                 onChange={(v) => setRates((r) => ({ ...r, [model]: v }))}
-                hint={rate > 0 ? `100 credits = ${Math.floor((100 / rate) * 10) / 10} min` : undefined}
+                hint={rate > 0 ? `250 credits = ${Math.floor((250 / rate) * 10) / 10} min` : undefined}
               />
             </div>
           );

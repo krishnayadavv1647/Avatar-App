@@ -17,6 +17,13 @@ let stock;
 before(async () => {
   app = await startTestApp();
   admin = await signUp(app.baseUrl, { email: "admin@example.com", name: "Admin" });
+  // These are about the admin's user screens, not the shipped credit defaults (those
+  // have their own test): pin round numbers an admin could equally have set.
+  const pinned = await admin.put("/api/admin/credits/settings", {
+    rates: { standard: 10, flash: 6, lite: 4 },
+    welcomeCredits: 100,
+  });
+  assert.equal(pinned.status, 200);
   [stock] = (await admin.get("/api/studio/stock")).body.avatars;
 });
 
